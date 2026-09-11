@@ -18,6 +18,8 @@ import { playerRoutes } from "./routes/players.js";
 import { matchRoutes } from "./routes/matches.js";
 import { standingsRoutes } from "./routes/standings.js";
 import { liveRoutes } from "./routes/live.js";
+import { authRoutes } from "./routes/auth.js";
+import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
 
@@ -53,6 +55,7 @@ async function bootstrap() {
         },
       ],
       tags: [
+        { name: "Autenticação & Planos", description: "Geração de chaves, limites e planos" },
         { name: "Partidas", description: "Jogos, placares ao vivo, eventos e estatísticas" },
         { name: "Partidas - Operações em Tempo Real", description: "Disparo e sincronização de lances e placar" },
         { name: "Classificação", description: "Tabelas e pontuação das ligas" },
@@ -60,6 +63,21 @@ async function bootstrap() {
         { name: "Atletas", description: "Jogadores, scouts e dados físicos" },
         { name: "Competições", description: "Ligas, copas e temporadas" },
         { name: "Estádios", description: "Praças esportivas, capacidade e cidades" },
+      ],
+      components: {
+        securitySchemes: {
+          apiKeyAuth: {
+            type: "apiKey",
+            name: "x-api-key",
+            in: "header",
+            description: "Chave de acesso obtida via /api/v1/auth/register",
+          },
+        },
+      },
+      security: [
+        {
+          apiKeyAuth: [],
+        },
       ],
     },
     transform: jsonSchemaTransform,
@@ -93,7 +111,11 @@ async function bootstrap() {
     };
   });
 
+  // Hook de Autenticação e Rate Limiting
+  app.addHook("onRequest", authAndRateLimitMiddleware);
+
   // Registrar rotas modulares
+  await app.register(authRoutes, { prefix: "/api/v1/auth" });
   await app.register(competitionRoutes, { prefix: "/api/v1/competitions" });
   await app.register(teamRoutes, { prefix: "/api/v1/teams" });
   await app.register(venueRoutes, { prefix: "/api/v1/venues" });

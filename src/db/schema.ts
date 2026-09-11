@@ -53,6 +53,12 @@ export const playerPositionEnum = pgEnum("player_position", [
   "FORWARD",
 ]);
 
+export const apiPlanEnum = pgEnum("api_plan", [
+  "FREE",
+  "PRO",
+  "ENTERPRISE",
+]);
+
 // ----------------------------------------------------------------------------
 // 2. VENUES
 // ----------------------------------------------------------------------------
@@ -324,6 +330,25 @@ export const matchStatistics = pgTable(
   (table) => [
     uniqueIndex("uq_match_team_stats").on(table.matchId, table.teamId),
   ]
+);
+
+// ----------------------------------------------------------------------------
+// 10. API KEYS & ACCESS CONTROL
+// ----------------------------------------------------------------------------
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userName: varchar("user_name", { length: 120 }).notNull(),
+    email: varchar("email", { length: 150 }).notNull().unique(),
+    key: varchar("key", { length: 64 }).notNull().unique(),
+    plan: apiPlanEnum("plan").default("FREE").notNull(),
+    rateLimitPerMinute: integer("rate_limit_per_minute").default(10).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("idx_api_keys_key").on(table.key)]
 );
 
 // ----------------------------------------------------------------------------

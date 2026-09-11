@@ -40,6 +40,8 @@ CREATE TYPE player_position AS ENUM (
     'FORWARD'
 );
 
+CREATE TYPE api_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
+
 -- ----------------------------------------------------------------------------
 -- 2. INFRAESTRUTURA BÁSICA (ESTÁDIOS E CLUBES)
 -- ----------------------------------------------------------------------------
@@ -236,6 +238,24 @@ CREATE TABLE match_statistics (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_match_team_stats UNIQUE (match_id, team_id)
 );
+
+-- ----------------------------------------------------------------------------
+-- 9. AUTENTICAÇÃO E CONTROLE DE ACESSO (API KEYS)
+-- ----------------------------------------------------------------------------
+
+CREATE TABLE api_keys (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_name VARCHAR(120) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    key VARCHAR(64) NOT NULL UNIQUE,
+    plan api_plan NOT NULL DEFAULT 'FREE',
+    rate_limit_per_minute INT NOT NULL DEFAULT 10,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_api_keys_key ON api_keys (key);
 
 -- ============================================================================
 -- 9. TRIGGERS PARA UPDATED_AT AUTOMÁTICO

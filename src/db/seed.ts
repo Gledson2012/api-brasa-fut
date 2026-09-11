@@ -11,12 +11,14 @@ import {
   matchLineups,
   matchStatistics,
   standings,
+  apiKeys,
 } from "./schema.js";
 
 async function seed() {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
 
   // Limpar tabelas existentes (ordem reversa de dependências)
+  await db.delete(apiKeys);
   await db.delete(matchStatistics);
   await db.delete(matchEvents);
   await db.delete(matchLineups);
@@ -303,6 +305,26 @@ async function seed() {
     { seasonId: season2026.id, teamId: teamMap.get("Atlético-MG")!, position: 6, points: 0, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, form: "" },
     { seasonId: season2026.id, teamId: teamMap.get("Cruzeiro")!, position: 7, points: 0, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, form: "" },
     { seasonId: season2026.id, teamId: teamMap.get("Internacional")!, position: 8, points: 0, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, form: "" },
+  ]);
+
+  console.log("🔑 Inserindo Chaves de API para demonstração...");
+  await db.insert(apiKeys).values([
+    {
+      userName: "Dev Demonstração",
+      email: "dev@brasafut.com.br",
+      key: "bf_live_demo_test_key_123",
+      plan: "PRO",
+      rateLimitPerMinute: 120,
+      isActive: true,
+    },
+    {
+      userName: "Usuário Gratuito",
+      email: "free@brasafut.com.br",
+      key: "bf_live_free_test_key_456",
+      plan: "FREE",
+      rateLimitPerMinute: 10,
+      isActive: true,
+    },
   ]);
 
   console.log("✅ Seed concluído com sucesso!");

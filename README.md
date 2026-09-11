@@ -6,7 +6,12 @@
 
 ## 🚀 Funcionalidades Principais
 
-- **Documentação Interativa Swagger/OpenAPI**: Navegação e testes de todos os endpoints via `/docs`.
+- **Documentação Interativa Swagger/OpenAPI**: Navegação e testes de todos os endpoints via `/docs`, com botão nativo **Authorize** para testar com sua API Key.
+- **Sistema de API Keys & Rate Limiting**: Proteção de endpoints inspirada em plataformas como RapidAPI e Football-Data.org:
+  - Plano **FREE**: 10 req/min
+  - Plano **PRO**: 120 req/min
+  - Plano **ENTERPRISE**: 1.000 req/min
+  - Cabeçalhos RFC padrão: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 - **Transmissões e Eventos em Tempo Real (WebSockets)**: Canal de streaming para placares em tempo real e lances de jogos (`ws://localhost:3333/api/v1/live/ws`).
 - **Módulo de Estatísticas Avançadas**: Posse de bola, finalizações certas/totais, faltas, escanteios, cartões e histórico de confronto direto (H2H).
 - **Cobertura de Dados Completa**:
