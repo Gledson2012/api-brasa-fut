@@ -1,0 +1,29 @@
+name: Sofascore Auto Sync
+
+on:
+  schedule:
+    # A cada 30 minutos todos os dias
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Sofascore Sync Worker
+        env:
+          TARGET_URL: "https://api-brasa-fut.vercel.app"
+          API_KEY: "bf_live_55d453438b0372a3582e34584110438a1eecbd87"
+        run: npm run sync:sofascore

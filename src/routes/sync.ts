@@ -59,4 +59,36 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       return result;
     }
   );
+
+  app.post(
+    "/push",
+    {
+      schema: {
+        tags: ["Sincronização"],
+        summary: "Receber e persistir eventos e tabela do Sofascore via Push Worker",
+      },
+    },
+    async (request, reply) => {
+      const body = request.body as {
+        events?: any[];
+        standings?: any[];
+        currentRound?: number;
+      };
+
+      if (!body || (!body.events && !body.standings)) {
+        return reply.status(400).send({
+          success: false,
+          message: "Payload inválido. Envie 'events' ou 'standings'.",
+        });
+      }
+
+      const result = await SofascoreSyncService.processData(
+        body.events || [],
+        body.standings || [],
+        body.currentRound || 27
+      );
+
+      return result;
+    }
+  );
 };
