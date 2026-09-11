@@ -9,16 +9,18 @@ export class RateLimiter {
   constructor(windowSeconds: number = 60) {
     this.windowMs = windowSeconds * 1000;
 
-    // Limpeza periódica a cada 2 minutos para evitar acúmulo de memória
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, record] of this.records.entries()) {
-        record.timestamps = record.timestamps.filter((t) => now - t < this.windowMs);
-        if (record.timestamps.length === 0) {
-          this.records.delete(key);
+    // Limpeza periódica (apenas fora de Serverless para evitar manter event-loop acordado)
+    if (!process.env.VERCEL) {
+      setInterval(() => {
+        const now = Date.now();
+        for (const [key, record] of this.records.entries()) {
+          record.timestamps = record.timestamps.filter((t) => now - t < this.windowMs);
+          if (record.timestamps.length === 0) {
+            this.records.delete(key);
+          }
         }
-      }
-    }, 120000).unref();
+      }, 120000).unref();
+    }
   }
 
   public check(key: string, limit: number): {

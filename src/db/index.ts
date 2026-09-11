@@ -9,6 +9,14 @@ const connectionString =
   process.env.DATABASE_URL ||
   "postgresql://postgres:postgrespassword@localhost:5432/brasa_fut";
 
-// Disable prefetch as it is not supported for "Transaction" pool mode if using PgBouncer
-export const client = postgres(connectionString);
+export const client = postgres(connectionString, {
+  max: process.env.VERCEL ? 1 : 10,
+  idle_timeout: 20,
+  connect_timeout: 10,
+  ssl:
+    process.env.DATABASE_URL?.includes("sslmode=require") || process.env.VERCEL
+      ? "prefer"
+      : undefined,
+});
+
 export const db = drizzle(client, { schema });

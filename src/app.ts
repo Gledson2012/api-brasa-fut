@@ -37,8 +37,10 @@ export function buildApp() {
     origin: "*",
   });
 
-  // WebSockets para tempo real (ativo em servidores com suporte a conexões contínuas)
-  app.register(fastifyWebsocket);
+  // WebSockets para tempo real (apenas fora do ambiente Serverless da Vercel)
+  if (!process.env.VERCEL) {
+    app.register(fastifyWebsocket);
+  }
 
   // Swagger OpenAPI Docs
   app.register(fastifySwagger, {

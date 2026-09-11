@@ -3,10 +3,19 @@ import { realtimeBroker } from "../services/pubsub.js";
 import { MatchSimulator } from "../services/matchSimulator.js";
 
 export const liveRoutes: FastifyPluginAsync = async (app) => {
-  // Conexão WebSocket para receber eventos ao vivo
-  app.get("/ws", { websocket: true }, (socket, req) => {
-    realtimeBroker.registerClient(socket);
-  });
+  // Conexão WebSocket para receber eventos ao vivo (apenas em servidores persistentes)
+  if (!process.env.VERCEL) {
+    app.get("/ws", { websocket: true }, (socket, req) => {
+      realtimeBroker.registerClient(socket);
+    });
+  } else {
+    app.get("/ws", async (request, reply) => {
+      return reply.status(501).send({
+        error: "WebSockets não são suportados no ambiente Serverless da Vercel.",
+        suggestion: "Utilize polling nos endpoints REST /api/v1/matches/live ou utilize Webhooks.",
+      });
+    });
+  }
 
   // Métricas do canal em tempo real (HTTP)
   app.get("/status", async () => {
