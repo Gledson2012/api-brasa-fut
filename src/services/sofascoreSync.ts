@@ -260,7 +260,8 @@ export class SofascoreSyncService {
   public static async processData(
     allEvents: SofascoreEvent[],
     standingsRows?: SofascoreStandingsRow[],
-    currentRoundNum: number = 27
+    currentRoundNum: number = 27,
+    competitionCode: string = "BRA-1"
   ): Promise<{
     success: boolean;
     message: string;
@@ -269,22 +270,27 @@ export class SofascoreSyncService {
     currentRound?: number;
     timestamp: string;
   }> {
-    // 1. Obter ou criar competição Série A e Temporada 2026
+    // 1. Obter ou criar competição e Temporada 2026
     let [comp] = await db
       .select()
       .from(competitions)
-      .where(eq(competitions.code, "BRA-1"));
+      .where(eq(competitions.code, competitionCode));
 
     if (!comp) {
+      const compMeta = competitionCode === "BRA-2"
+        ? { name: "Brasileirão Série B", type: "LEAGUE", logo: "https://upload.wikimedia.org/wikipedia/pt/f/f4/Campeonato_Brasileiro_S%C3%A9rie_B_logo.png" }
+        : competitionCode === "LIB"
+        ? { name: "CONMEBOL Libertadores", type: "INTERNATIONAL", logo: "https://upload.wikimedia.org/wikipedia/pt/c/c2/Copa_Libertadores_da_Am%C3%A9rica_logo.png" }
+        : { name: "Brasileirão Série A", type: "LEAGUE", logo: "https://upload.wikimedia.org/wikipedia/pt/b/b4/Campeonato_Brasileiro_S%C3%A9rie_A_logo.png" };
+
       [comp] = await db
         .insert(competitions)
         .values({
-          name: "Brasileirão Série A",
-          code: "BRA-1",
-          country: "Brasil",
-          type: "LEAGUE",
-          logoUrl:
-            "https://upload.wikimedia.org/wikipedia/pt/b/b4/Campeonato_Brasileiro_S%C3%A9rie_A_logo.png",
+          name: compMeta.name,
+          code: competitionCode,
+          country: competitionCode === "LIB" ? "América do Sul" : "Brasil",
+          type: compMeta.type as "LEAGUE" | "INTERNATIONAL",
+          logoUrl: compMeta.logo,
         })
         .returning();
     }

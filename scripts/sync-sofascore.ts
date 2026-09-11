@@ -33,37 +33,45 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-async function run() {
-  console.log("🚀 [Sofascore Scraper Worker] Iniciando coleta de dados reais...");
-  console.log(`📡 Destino da sincronização: ${TARGET_URL}`);
+interface LeagueConfig {
+  code: string;
+  name: string;
+  tournamentId: number;
+  seasonId: number;
+}
 
-  // 1. Descobrir rodada atual do Brasileirão Série A 2026
-  console.log("🔍 Consultando rodadas da Série A 2026...");
+const LEAGUES: LeagueConfig[] = [
+  { code: "BRA-1", name: "Brasileirão Série A", tournamentId: 325, seasonId: 87678 },
+  { code: "BRA-2", name: "Brasileirão Série B", tournamentId: 390, seasonId: 89840 },
+  { code: "LIB", name: "CONMEBOL Libertadores", tournamentId: 384, seasonId: 87760 },
+];
+
+async function syncLeague(league: LeagueConfig, liveEvents: any[]) {
+  console.log(`\n========================================`);
+  console.log(`🏆 Sincronizando ${league.name} (${league.code})...`);
+  console.log(`========================================`);
+
+  // 1. Descobrir rodadas
   const roundsData = await fetchJson<{ currentRound?: { round: number } }>(
-    "https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/rounds"
+    `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/rounds`
   );
 
   const currentRoundNum = roundsData?.currentRound?.round || 27;
   console.log(`📌 Rodada atual identificada: Rodada ${currentRoundNum}`);
 
-  // Coletar rodadas recentes e próximas para ter histórico e calendário real
   const roundsToFetch = [
-    Math.max(1, currentRoundNum - 2),
     Math.max(1, currentRoundNum - 1),
     currentRoundNum,
     Math.min(38, currentRoundNum + 1),
-    Math.min(38, currentRoundNum + 2),
   ];
 
   const uniqueRounds = Array.from(new Set(roundsToFetch));
-  console.log(`⚽ Rodadas a coletar: ${uniqueRounds.join(", ")}`);
-
   const allEvents: any[] = [];
 
   for (const round of uniqueRounds) {
     console.log(`📥 Coletando eventos da Rodada ${round}...`);
     const roundRes = await fetchJson<{ events?: any[] }>(
-      `https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/events/round/${round}`
+      `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/events/round/${round}`
     );
     if (roundRes?.events && Array.isArray(roundRes.events)) {
       allEvents.push(...roundRes.events);
@@ -71,40 +79,31 @@ async function run() {
     }
   }
 
-  // 2. Coletar partidas ao vivo
-  console.log("⚡ Coletando jogos ao vivo...");
-  const liveRes = await fetchJson<{ events?: any[] }>(
-    "https://api.sofascore.com/api/v1/sport/football/events/live"
-  );
-
-  if (liveRes?.events && Array.isArray(liveRes.events)) {
-    for (const liveEv of liveRes.events) {
-      if (!allEvents.some((e) => e.id === liveEv.id)) {
-        allEvents.push(liveEv);
-      }
-    }
-    console.log(`   ↳ ${liveRes.events.length} jogos ao vivo capturados`);
-  }
-
-  // 3. Coletar classificação total do Brasileirão 2026
-  console.log("📊 Coletando classificação oficial...");
+  // 2. Classificação
+  console.log(`📊 Coletando classificação oficial de ${league.name}...`);
   const standingsRes = await fetchJson<{ standings?: Array<{ rows?: any[] }> }>(
-    "https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/standings/total"
+    `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/standings/total`
   );
   const standingsRows = standingsRes?.standings?.[0]?.rows || [];
   console.log(`   ↳ ${standingsRows.length} clubes na classificação`);
 
-  console.log(
-    `📦 Total consolidado: ${allEvents.length} partidas e ${standingsRows.length} linhas de classificação.`
-  );
-
-  if (allEvents.length === 0 && standingsRows.length === 0) {
-    console.error("❌ Nenhum dado obtido do Sofascore. Abortando push.");
-    process.exit(1);
+  // 3. Adicionar jogos ao vivo correspondentes
+  for (const liveEv of liveEvents) {
+    if (
+      liveEv.tournament?.uniqueTournament?.id === league.tournamentId &&
+      !allEvents.some((e) => e.id === liveEv.id)
+    ) {
+      allEvents.push(liveEv);
+    }
   }
 
-  // 4. Enviar payload consolidado para a API via POST /api/v1/sync/push
-  console.log(`📤 Enviando push para ${TARGET_URL}/api/v1/sync/push...`);
+  if (allEvents.length === 0 && standingsRows.length === 0) {
+    console.warn(`⚠️ Nenhum dado retornado para ${league.name}. Pulando.`);
+    return;
+  }
+
+  // 4. Enviar push
+  console.log(`📤 Enviando push (${allEvents.length} jogos, ${standingsRows.length} posições)...`);
   const pushUrl = `${TARGET_URL}/api/v1/sync/push`;
 
   try {
@@ -118,22 +117,34 @@ async function run() {
         events: allEvents,
         standings: standingsRows,
         currentRound: currentRoundNum,
+        competitionCode: league.code,
       }),
     });
 
     const responseData = await response.json();
-    console.log("✨ Resposta da API:", responseData);
-
-    if (response.ok) {
-      console.log("🎉 Sincronização concluída com sucesso absoluto!");
-    } else {
-      console.error(`⚠️ API retornou status ${response.status}:`, responseData);
-      process.exit(1);
-    }
+    console.log(`✨ Resposta para ${league.code}:`, responseData);
   } catch (err: any) {
-    console.error("❌ Falha na requisição HTTP para a API:", err.message);
-    process.exit(1);
+    console.error(`❌ Erro no push de ${league.code}:`, err.message);
   }
+}
+
+async function run() {
+  console.log("🚀 [Sofascore Scraper Worker Multi-Ligas] Iniciando...");
+  console.log(`📡 Destino da sincronização: ${TARGET_URL}`);
+
+  // Coleta inicial de jogos ao vivo
+  console.log("⚡ Coletando jogos ao vivo globais...");
+  const liveRes = await fetchJson<{ events?: any[] }>(
+    "https://api.sofascore.com/api/v1/sport/football/events/live"
+  );
+  const liveEvents = liveRes?.events || [];
+  console.log(`   ↳ ${liveEvents.length} partidas ao vivo encontradas`);
+
+  for (const league of LEAGUES) {
+    await syncLeague(league, liveEvents);
+  }
+
+  console.log("\n🎉 Todas as ligas foram sincronizadas com sucesso!");
 }
 
 run();

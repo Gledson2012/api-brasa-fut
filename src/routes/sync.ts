@@ -73,6 +73,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
         events?: any[];
         standings?: any[];
         currentRound?: number;
+        competitionCode?: string;
       };
 
       if (!body || (!body.events && !body.standings)) {
@@ -85,7 +86,8 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       const result = await SofascoreSyncService.processData(
         body.events || [],
         body.standings || [],
-        body.currentRound || 27
+        body.currentRound || 27,
+        body.competitionCode || "BRA-1"
       );
 
       return result;
