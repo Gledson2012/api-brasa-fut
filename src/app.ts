@@ -20,6 +20,7 @@ import { standingsRoutes } from "./routes/standings.js";
 import { liveRoutes } from "./routes/live.js";
 import { authRoutes } from "./routes/auth.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { syncRoutes } from "./routes/sync.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -108,6 +109,7 @@ export function buildApp() {
         matchesLive: "/api/v1/matches/live",
         standings: "/api/v1/standings?seasonId=3",
         webhooks: "/api/v1/webhooks",
+        syncSofascore: "/api/v1/sync/sofascore",
       },
     };
   });
@@ -125,6 +127,7 @@ export function buildApp() {
   app.register(matchRoutes, { prefix: "/api/v1/matches" });
   app.register(standingsRoutes, { prefix: "/api/v1/standings" });
   app.register(liveRoutes, { prefix: "/api/v1/live" });
+  app.register(syncRoutes, { prefix: "/api/v1/sync" });
 
   return app;
 }

@@ -13,6 +13,7 @@ import {
 } from "../db/schema.js";
 import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
+import { SofascoreSyncService } from "../services/sofascoreSync.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -56,6 +57,7 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
+      try { await SofascoreSyncService.sync(false); } catch (e) {}
       const { date, status, live, seasonId, teamId, round } = request.query;
 
       const homeTeam = db
@@ -161,6 +163,7 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async () => {
+      try { await SofascoreSyncService.sync(false); } catch (e) {}
       const homeTeam = db
         .select({
           id: teams.id,

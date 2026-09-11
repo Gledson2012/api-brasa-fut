@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index.js";
 import { standings, teams, seasons, competitions } from "../db/schema.js";
 import { eq, asc } from "drizzle-orm";
+import { SofascoreSyncService } from "../services/sofascoreSync.js";
 
 export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
   // Obter tabela de classificação da temporada
@@ -18,6 +19,7 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
+      try { await SofascoreSyncService.sync(false); } catch (e) {}
       const { seasonId } = request.query;
 
       const table = await db
