@@ -7,6 +7,7 @@ dotenv.config();
 
 const connectionString =
   process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
   "postgresql://postgres:postgrespassword@localhost:5432/brasa_fut";
 
 export const client = postgres(connectionString, {
