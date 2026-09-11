@@ -19,6 +19,7 @@ import { matchRoutes } from "./routes/matches.js";
 import { standingsRoutes } from "./routes/standings.js";
 import { liveRoutes } from "./routes/live.js";
 import { authRoutes } from "./routes/auth.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -56,6 +57,7 @@ async function bootstrap() {
       ],
       tags: [
         { name: "Autenticação & Planos", description: "Geração de chaves, limites e planos" },
+        { name: "Webhooks", description: "Disparo e auditoria de notificações instantâneas" },
         { name: "Partidas", description: "Jogos, placares ao vivo, eventos e estatísticas" },
         { name: "Partidas - Operações em Tempo Real", description: "Disparo e sincronização de lances e placar" },
         { name: "Classificação", description: "Tabelas e pontuação das ligas" },
@@ -116,6 +118,7 @@ async function bootstrap() {
 
   // Registrar rotas modulares
   await app.register(authRoutes, { prefix: "/api/v1/auth" });
+  await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
   await app.register(competitionRoutes, { prefix: "/api/v1/competitions" });
   await app.register(teamRoutes, { prefix: "/api/v1/teams" });
   await app.register(venueRoutes, { prefix: "/api/v1/venues" });

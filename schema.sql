@@ -257,6 +257,32 @@ CREATE TABLE api_keys (
 
 CREATE INDEX idx_api_keys_key ON api_keys (key);
 
+CREATE TABLE webhooks (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    api_key_id BIGINT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+    url VARCHAR(500) NOT NULL,
+    secret VARCHAR(64) NOT NULL,
+    events TEXT[] NOT NULL DEFAULT '{"ALL"}',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE webhook_deliveries (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    webhook_id BIGINT NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    payload JSONB NOT NULL,
+    status_code INT,
+    response_body TEXT,
+    success BOOLEAN NOT NULL DEFAULT FALSE,
+    attempt_count INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_webhooks_api_key_id ON webhooks(api_key_id);
+CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
+
 -- ============================================================================
 -- 9. TRIGGERS PARA UPDATED_AT AUTOMÁTICO
 -- ============================================================================

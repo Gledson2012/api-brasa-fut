@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { WebSocket } from "ws";
+import { WebhookDispatcher } from "./webhookDispatcher.js";
 
 export interface LiveMatchUpdate {
   type: "SCORE_UPDATE" | "MATCH_EVENT" | "STATUS_CHANGE";
@@ -68,6 +69,12 @@ class RealtimeBroker extends EventEmitter {
 
   public publishMatchUpdate(update: LiveMatchUpdate) {
     this.emit("live_update", update);
+    WebhookDispatcher.dispatch({
+      event: update.type,
+      matchId: update.matchId,
+      timestamp: update.timestamp,
+      data: update.data,
+    });
   }
 
   public getConnectedClientsCount(): number {

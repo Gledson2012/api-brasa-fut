@@ -8,6 +8,7 @@ import {
   date,
   timestamp,
   boolean,
+  jsonb,
   pgEnum,
   uniqueIndex,
   index,
@@ -349,6 +350,41 @@ export const apiKeys = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [index("idx_api_keys_key").on(table.key)]
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    apiKeyId: bigint("api_key_id", { mode: "number" })
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    url: varchar("url", { length: 500 }).notNull(),
+    secret: varchar("secret", { length: 64 }).notNull(),
+    events: text("events").array().notNull().default(["ALL"]),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("idx_webhooks_api_key_id").on(table.apiKeyId)]
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    webhookId: bigint("webhook_id", { mode: "number" })
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    eventType: varchar("event_type", { length: 50 }).notNull(),
+    payload: jsonb("payload").notNull(),
+    statusCode: integer("status_code"),
+    responseBody: text("response_body"),
+    success: boolean("success").default(false).notNull(),
+    attemptCount: integer("attempt_count").default(1).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("idx_webhook_deliveries_webhook_id").on(table.webhookId)]
 );
 
 // ----------------------------------------------------------------------------
