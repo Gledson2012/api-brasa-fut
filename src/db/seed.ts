@@ -14,7 +14,7 @@ import {
   apiKeys,
 } from "./schema.js";
 
-async function seed() {
+export async function seed(closeClient: boolean = true) {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
 
   // Limpar tabelas existentes (ordem reversa de dependências)
@@ -368,10 +368,18 @@ async function seed() {
   ]);
 
   console.log("✅ Seed concluído com sucesso!");
-  await client.end();
+  if (closeClient) {
+    await client.end();
+  }
 }
 
-seed().catch((err) => {
-  console.error("❌ Erro ao executar seed:", err);
-  process.exit(1);
-});
+// Executar se chamado diretamente via CLI
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith("seed.ts") || process.argv[1].endsWith("seed.js"))
+) {
+  seed().catch((err) => {
+    console.error("❌ Erro ao executar seed:", err);
+    process.exit(1);
+  });
+}
