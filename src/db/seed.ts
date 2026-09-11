@@ -75,28 +75,68 @@ async function seed() {
 
   const teamMap = new Map(insertedTeams.map((t) => [t.shortName, t.id]));
 
-  console.log("🏆 Inserindo competição e temporada 2026...");
-  const [brasileirao] = await db
+  console.log("🏆 Inserindo catálogo completo de campeonatos e ligas...");
+  const competitionsData = [
+    // Brasil - Nacionais
+    { name: "Brasileirão Série A", code: "BRA-1", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/b4/Campeonato_Brasileiro_S%C3%A9rie_A_logo.png" },
+    { name: "Brasileirão Série B", code: "BRA-2", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/f/f4/Campeonato_Brasileiro_S%C3%A9rie_B_logo.png" },
+    { name: "Brasileirão Série C", code: "BRA-3", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/bd/Campeonato_Brasileiro_S%C3%A9rie_C_logo.png" },
+    { name: "Copa do Brasil", code: "CDB", country: "Brasil", type: "CUP" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/9/9e/Copa_do_Brasil_de_Futebol_logo.png" },
+    { name: "Supercopa do Brasil", code: "SCB", country: "Brasil", type: "CUP" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/4/41/Supercopa_do_Brasil_logo.png" },
+
+    // Brasil - Estaduais e Regionais
+    { name: "Campeonato Paulista", code: "PAULISTAO", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/3/30/Campeonato_Paulista_logo.png" },
+    { name: "Campeonato Carioca", code: "CARIOCAO", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/8/8f/Campeonato_Carioca_logo.png" },
+    { name: "Campeonato Mineiro", code: "MINEIRO", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/b2/Campeonato_Mineiro_logo.png" },
+    { name: "Campeonato Gaúcho", code: "GAUCHAO", country: "Brasil", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/9/90/Campeonato_Gaucho_logo.png" },
+    { name: "Copa do Nordeste", code: "CNE", country: "Brasil", type: "CUP" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/a/a2/Copa_do_Nordeste_logo.png" },
+
+    // América do Sul (CONMEBOL)
+    { name: "CONMEBOL Libertadores", code: "LIB", country: "América do Sul", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/c/c2/Copa_Libertadores_da_Am%C3%A9rica_logo.png" },
+    { name: "CONMEBOL Sul-Americana", code: "SUL", country: "América do Sul", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/f/fb/Copa_Sul-Americana_logo.png" },
+    { name: "Recopa Sul-Americana", code: "REC", country: "América do Sul", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/b8/Recopa_Sul-Americana_logo.png" },
+
+    // Europa (UEFA & Ligas Nacionais)
+    { name: "UEFA Champions League", code: "UCL", country: "Europa", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/f3/UEFA_Champions_League_logo_2.svg" },
+    { name: "UEFA Europa League", code: "UEL", country: "Europa", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/UEFA_Europa_League_logo_%282021%29.svg" },
+    { name: "UEFA Conference League", code: "UECL", country: "Europa", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/ec/UEFA_Europa_Conference_League_logo.svg" },
+    { name: "Premier League", code: "PL", country: "Inglaterra", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/en/f/f2/Premier_League_Logo.svg" },
+    { name: "La Liga", code: "LAL", country: "Espanha", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0f/LaLiga_logo_2023.svg" },
+    { name: "Serie A Italiana", code: "SA-ITA", country: "Itália", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e9/Serie_A_logo_2019.svg" },
+    { name: "Bundesliga", code: "BUN", country: "Alemanha", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/en/d/df/Bundesliga_logo_%282017%29.svg" },
+    { name: "Ligue 1", code: "LIG-1", country: "França", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Ligue_1_logo_%282024%29.svg" },
+    { name: "Primeira Liga", code: "POR-1", country: "Portugal", type: "LEAGUE" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/4/4b/Liga_Portugal_Betclic_logo.png" },
+
+    // Torneios Mundiais e de Seleções (FIFA / CONMEBOL / UEFA)
+    { name: "Copa do Mundo FIFA", code: "WC-2026", country: "Mundial", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e0/FIFA_World_Cup_2026_Emblem.svg" },
+    { name: "Copa do Mundo de Clubes da FIFA", code: "FCWC", country: "Mundial", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/8/87/FIFA_Club_World_Cup_logo.svg" },
+    { name: "Copa América", code: "CA", country: "América do Sul", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/pt/2/25/Copa_Am%C3%A9rica_logo.png" },
+    { name: "UEFA Eurocopa", code: "EURO", country: "Europa", type: "INTERNATIONAL" as const, logoUrl: "https://upload.wikimedia.org/wikipedia/commons/1/15/UEFA_Euro_2024_Logo.svg" },
+  ];
+
+  const insertedCompetitions = await db
     .insert(competitions)
-    .values({
-      name: "Brasileirão Série A",
-      code: "BRA-1",
-      country: "Brasil",
-      type: "LEAGUE",
-      logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/b4/Campeonato_Brasileiro_S%C3%A9rie_A_logo.png",
-    })
+    .values(competitionsData)
     .returning();
 
-  const [season2026] = await db
-    .insert(seasons)
-    .values({
-      competitionId: brasileirao.id,
-      name: "2026",
-      startDate: "2026-04-12",
-      endDate: "2026-12-06",
+  const compMap = new Map(insertedCompetitions.map((c) => [c.code, c]));
+  const brasileirao = compMap.get("BRA-1")!;
+
+  // Criar temporadas correspondentes para cada torneio
+  const seasonsData = insertedCompetitions.map((comp) => {
+    const isEuropean = ["UCL", "UEL", "UECL", "PL", "LAL", "SA-ITA", "BUN", "LIG-1", "POR-1"].includes(comp.code || "");
+    return {
+      competitionId: comp.id,
+      name: isEuropean ? "2025/2026" : "2026",
+      startDate: isEuropean ? "2025-08-15" : "2026-01-15",
+      endDate: isEuropean ? "2026-05-30" : "2026-12-10",
       isCurrent: true,
-    })
-    .returning();
+    };
+  });
+
+  const insertedSeasons = await db.insert(seasons).values(seasonsData).returning();
+  const seasonMap = new Map(insertedSeasons.map((s) => [s.competitionId, s]));
+  const season2026 = seasonMap.get(brasileirao.id)!;
 
   console.log("⚽ Inserindo jogadores e elencos...");
   const insertedPlayers = await db
