@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "749185770012",
+    "project_id": "brasafut-app",
+    "storage_bucket": "brasafut-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:749185770012:android:4ad5139344cad4e6a5b5d9",
+        "android_client_info": {
+          "package_name": "com.example.brasafut"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDz3DFprhDGlPkJozxNobT_U6F4eH9AUT8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
