@@ -8,6 +8,11 @@ import {
   seasons,
   competitions,
   standings,
+  players,
+  teamRosters,
+  matchEvents,
+  matchLineups,
+  playerSeasonStatistics,
 } from "../db/schema.js";
 import { eq, and, or, ilike } from "drizzle-orm";
 import { realtimeBroker } from "./pubsub.js";
@@ -84,7 +89,7 @@ export class SofascoreSyncService {
   private static lastSyncTimestamp: number = 0;
   private static isSyncing: boolean = false;
 
-  private static async fetchJson<T>(url: string): Promise<T | null> {
+  public static async fetchJson<T>(url: string): Promise<T | null> {
     try {
       const { stdout } = await execFileAsync("curl", [
         "-s",
@@ -95,7 +100,7 @@ export class SofascoreSyncService {
         "-H",
         "Accept: */*",
         url,
-      ]);
+      ], { maxBuffer: 20 * 1024 * 1024 });
 
       const trimmed = stdout.trim();
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
@@ -244,7 +249,7 @@ export class SofascoreSyncService {
           );
           const rows = standingsData?.standings?.[0]?.rows || [];
 
-          // 5. Persistir dados reais
+          // 5. Persistir dados reais de jogos e classificação
           const res = await this.processData(
             leagueEvents,
             rows,
@@ -253,10 +258,17 @@ export class SofascoreSyncService {
           );
           totalMatchesSynced += res.matchesSynced;
           totalStandingsSynced += res.standingsSynced;
+
+          // 6. Sincronizar Artilharia, Líderes de Assistência e Estatísticas Oficiais
+          await this.syncLeagueTopPlayers(league);
+
         } catch (leagueErr: any) {
           console.warn(`[SofascoreSync] Erro ao sincronizar ${league.name}:`, leagueErr.message);
         }
       }
+
+      // Sincronizar elenco real e dados do Corinthians (incluindo Memphis Depay)
+      await this.syncCorinthiansSpecial();
 
       return {
         success: true,
@@ -368,8 +380,10 @@ export class SofascoreSyncService {
             )
           );
 
+        let savedMatchId: number;
+
         if (existing.length > 0) {
-          const matchId = existing[0].id;
+          savedMatchId = existing[0].id;
           await db
             .update(matches)
             .set({
@@ -383,18 +397,18 @@ export class SofascoreSyncService {
               venueId: venueId ?? existing[0].venueId,
               updatedAt: new Date(),
             })
-            .where(eq(matches.id, matchId));
+            .where(eq(matches.id, savedMatchId));
 
           if (status === "FIRST_HALF" || status === "SECOND_HALF") {
             realtimeBroker.publishMatchUpdate({
               type: "SCORE_UPDATE",
-              matchId,
+              matchId: savedMatchId,
               timestamp: new Date().toISOString(),
               data: { homeScore, awayScore, status },
             });
           }
         } else {
-          await db.insert(matches).values({
+          const [inserted] = await db.insert(matches).values({
             seasonId: season.id,
             venueId,
             homeTeamId,
@@ -406,9 +420,15 @@ export class SofascoreSyncService {
             awayScore: awayScore ?? 0,
             homeScoreHt: homeScoreHt ?? 0,
             awayScoreHt: awayScoreHt ?? 0,
-          });
+          }).returning();
+          savedMatchId = inserted.id;
         }
         matchesSyncedCount++;
+
+        // Sincronizar eventos reais (gols, cartões, escalações) para partidas finalizadas ou em andamento
+        if (status === "FINISHED" || status === "FIRST_HALF" || status === "SECOND_HALF") {
+          this.syncMatchIncidentsAndLineups(event.id, savedMatchId, homeTeamId, awayTeamId, season.id).catch(() => {});
+        }
       } catch (err) {
         console.warn(`[SofascoreSync] Erro ao sincronizar evento ${event.id}:`, err);
       }
@@ -469,10 +489,6 @@ export class SofascoreSyncService {
       }
     }
 
-    console.log(
-      `✅ [SofascoreSync] Processamento concluído! ${matchesSyncedCount} partidas e ${standingsSyncedCount} classificações atualizadas.`
-    );
-
     return {
       success: true,
       message: "Dados do Sofascore sincronizados com sucesso no banco!",
@@ -481,6 +497,411 @@ export class SofascoreSyncService {
       currentRound: currentRoundNum,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Sincroniza artilharia, assistências e scouts individuais da liga
+   */
+  public static async syncLeagueTopPlayers(league: {
+    code: string;
+    name: string;
+    tournamentId: number;
+    seasonId: number;
+  }) {
+    try {
+      const url = `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/top-players/overall`;
+      const data = await this.fetchJson<{ topPlayers?: Record<string, any[]> }>(url);
+      if (!data?.topPlayers) return;
+
+      const [comp] = await db.select().from(competitions).where(eq(competitions.code, league.code));
+      if (!comp) return;
+
+      const [season] = await db
+        .select()
+        .from(seasons)
+        .where(and(eq(seasons.competitionId, comp.id), eq(seasons.name, "2026")));
+      if (!season) return;
+
+      // Agrupar por jogador
+      const playerStatMap = new Map<number, {
+        sofaPlayer: any;
+        sofaTeam: any;
+        stats: Record<string, any>;
+      }>();
+
+      const categories = ["goals", "assists", "rating", "expectedGoals", "expectedAssists", "totalShots", "keyPasses"];
+      for (const cat of categories) {
+        const list = data.topPlayers[cat] || [];
+        for (const item of list) {
+          if (!item.player?.id) continue;
+          const pid = item.player.id;
+          let entry = playerStatMap.get(pid);
+          if (!entry) {
+            entry = { sofaPlayer: item.player, sofaTeam: item.team, stats: {} };
+            playerStatMap.set(pid, entry);
+          }
+          entry.stats = { ...entry.stats, ...item.statistics };
+          if (item.team) entry.sofaTeam = item.team;
+        }
+      }
+
+      for (const [, item] of playerStatMap.entries()) {
+        try {
+          const playerId = await this.findOrCreatePlayer(item.sofaPlayer);
+          const teamId = item.sofaTeam ? await this.findOrCreateTeam(item.sofaTeam, league.code) : null;
+          if (!teamId) continue;
+
+          // Registrar no elenco da temporada
+          await db.insert(teamRosters).values({
+            teamId,
+            playerId,
+            seasonId: season.id,
+            position: this.mapPosition(item.sofaPlayer.position),
+          }).onConflictDoNothing();
+
+          const goals = Number(item.stats.goals || 0);
+          const assists = Number(item.stats.assists || 0);
+          const appearances = Number(item.stats.appearances || 0);
+          const ratingVal = item.stats.rating ? String(Number(item.stats.rating).toFixed(2)) : "0.0";
+          const xG = item.stats.expectedGoals ? String(Number(item.stats.expectedGoals).toFixed(2)) : "0.0";
+          const xA = item.stats.expectedAssists ? String(Number(item.stats.expectedAssists).toFixed(2)) : "0.0";
+          const shotsTotal = Number(item.stats.totalShots || 0);
+          const shotsOnTarget = Number(item.stats.shotsOnTarget || 0);
+          const keyPasses = Number(item.stats.keyPasses || 0);
+          const yellowCards = Number(item.stats.yellowCards || 0);
+          const redCards = Number(item.stats.redCards || 0);
+
+          const existingStat = await db
+            .select()
+            .from(playerSeasonStatistics)
+            .where(
+              and(
+                eq(playerSeasonStatistics.playerId, playerId),
+                eq(playerSeasonStatistics.seasonId, season.id)
+              )
+            );
+
+          if (existingStat.length > 0) {
+            await db
+              .update(playerSeasonStatistics)
+              .set({
+                teamId,
+                appearances: appearances || existingStat[0].appearances,
+                goals: goals || existingStat[0].goals,
+                assists: assists || existingStat[0].assists,
+                rating: ratingVal !== "0.0" ? ratingVal : existingStat[0].rating,
+                expectedGoals: xG !== "0.0" ? xG : existingStat[0].expectedGoals,
+                expectedAssists: xA !== "0.0" ? xA : existingStat[0].expectedAssists,
+                shotsTotal: shotsTotal || existingStat[0].shotsTotal,
+                shotsOnTarget: shotsOnTarget || existingStat[0].shotsOnTarget,
+                keyPasses: keyPasses || existingStat[0].keyPasses,
+                yellowCards: yellowCards || existingStat[0].yellowCards,
+                redCards: redCards || existingStat[0].redCards,
+                updatedAt: new Date(),
+              })
+              .where(eq(playerSeasonStatistics.id, existingStat[0].id));
+          } else {
+            await db.insert(playerSeasonStatistics).values({
+              playerId,
+              seasonId: season.id,
+              teamId,
+              appearances,
+              goals,
+              assists,
+              rating: ratingVal,
+              expectedGoals: xG,
+              expectedAssists: xA,
+              shotsTotal,
+              shotsOnTarget,
+              keyPasses,
+              yellowCards,
+              redCards,
+            });
+          }
+        } catch (itemErr) {
+          // Ignora falha pontual de um jogador
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[SofascoreSync] Erro ao sincronizar scouts de ${league.name}:`, err.message);
+    }
+  }
+
+  /**
+   * Sincroniza elenco e estatísticas oficiais do Corinthians (com foco no Memphis Depay)
+   */
+  public static async syncCorinthiansSpecial() {
+    try {
+      const corinthiansSofaId = 1957;
+      const squadData = await this.fetchJson<{ players?: Array<{ player: any }> }>(
+        `https://api.sofascore.com/api/v1/team/${corinthiansSofaId}/players`
+      );
+      if (!squadData?.players) return;
+
+      const [comp] = await db.select().from(competitions).where(eq(competitions.code, "BRA-1"));
+      if (!comp) return;
+
+      const [season] = await db
+        .select()
+        .from(seasons)
+        .where(and(eq(seasons.competitionId, comp.id), eq(seasons.name, "2026")));
+      if (!season) return;
+
+      const corinthiansId = await this.findOrCreateTeam({
+        id: corinthiansSofaId,
+        name: "Corinthians",
+        shortName: "Corinthians",
+        nameCode: "COR",
+      });
+
+      for (const item of squadData.players) {
+        const p = item.player;
+        if (!p?.name) continue;
+
+        const playerId = await this.findOrCreatePlayer(p);
+        const jerseyNumber = p.jerseyNumber ? parseInt(p.jerseyNumber, 10) : (p.shirtNumber || null);
+
+        // Inserir ou atualizar no elenco
+        await db.insert(teamRosters).values({
+          teamId: corinthiansId,
+          playerId,
+          seasonId: season.id,
+          jerseyNumber,
+          position: this.mapPosition(p.position),
+        }).onConflictDoNothing();
+
+        // Para Memphis Depay e destaques, buscar estatísticas oficiais da temporada
+        const isMemphis = p.name.toLowerCase().includes("depay") || p.name.toLowerCase().includes("memphis");
+        if (isMemphis || p.jerseyNumber === "9" || p.jerseyNumber === "10") {
+          try {
+            const statsUrl = `https://api.sofascore.com/api/v1/player/${p.id}/unique-tournament/325/season/87678/statistics/overall`;
+            const statsData = await this.fetchJson<{ statistics?: Record<string, any> }>(statsUrl);
+            const st = statsData?.statistics;
+            if (st) {
+              const goals = Number(st.goals || 0);
+              const assists = Number(st.assists || 0);
+              const appearances = Number(st.appearances || 0);
+              const matchesStarted = Number(st.matchesStarted || 0);
+              const minutesPlayed = Number(st.minutesPlayed || 0);
+              const rating = st.rating ? String(Number(st.rating).toFixed(2)) : "0.0";
+              const xG = st.expectedGoals ? String(Number(st.expectedGoals).toFixed(2)) : "0.0";
+              const xA = st.expectedAssists ? String(Number(st.expectedAssists).toFixed(2)) : "0.0";
+              const shotsTotal = Number(st.totalShots || 0);
+              const shotsOnTarget = Number(st.shotsOnTarget || 0);
+              const keyPasses = Number(st.keyPasses || 0);
+              const yellowCards = Number(st.yellowCards || 0);
+              const redCards = Number(st.redCards || 0);
+
+              const existingStat = await db
+                .select()
+                .from(playerSeasonStatistics)
+                .where(
+                  and(
+                    eq(playerSeasonStatistics.playerId, playerId),
+                    eq(playerSeasonStatistics.seasonId, season.id)
+                  )
+                );
+
+              if (existingStat.length > 0) {
+                await db
+                  .update(playerSeasonStatistics)
+                  .set({
+                    appearances,
+                    matchesStarted,
+                    minutesPlayed,
+                    goals,
+                    assists,
+                    rating,
+                    expectedGoals: xG,
+                    expectedAssists: xA,
+                    shotsTotal,
+                    shotsOnTarget,
+                    keyPasses,
+                    yellowCards,
+                    redCards,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(playerSeasonStatistics.id, existingStat[0].id));
+              } else {
+                await db.insert(playerSeasonStatistics).values({
+                  playerId,
+                  seasonId: season.id,
+                  teamId: corinthiansId,
+                  appearances,
+                  matchesStarted,
+                  minutesPlayed,
+                  goals,
+                  assists,
+                  rating,
+                  expectedGoals: xG,
+                  expectedAssists: xA,
+                  shotsTotal,
+                  shotsOnTarget,
+                  keyPasses,
+                  yellowCards,
+                  redCards,
+                });
+              }
+            }
+          } catch {
+            // Ignora falha de busca de scout individual
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn("[SofascoreSync] Erro ao sincronizar elenco do Corinthians:", err.message);
+    }
+  }
+
+  /**
+   * Sincroniza eventos (gols, cartões) e escalações de uma partida
+   */
+  private static async syncMatchIncidentsAndLineups(
+    sofaEventId: number,
+    matchId: number,
+    homeTeamId: number,
+    awayTeamId: number,
+    seasonId: number
+  ) {
+    try {
+      // 1. Incidents
+      const incidentsUrl = `https://api.sofascore.com/api/v1/event/${sofaEventId}/incidents`;
+      const incidentsData = await this.fetchJson<{ incidents?: any[] }>(incidentsUrl);
+      if (incidentsData?.incidents) {
+        for (const inc of incidentsData.incidents) {
+          if (!inc.player?.id) continue;
+          const playerId = await this.findOrCreatePlayer(inc.player);
+          const teamId = inc.isHome ? homeTeamId : awayTeamId;
+
+          let eventType: "GOAL" | "OWN_GOAL" | "PENALTY_SCORED" | "YELLOW_CARD" | "RED_CARD" | "SECOND_YELLOW" | "SUBSTITUTION" | null = null;
+          if (inc.incidentType === "goal") {
+            if (inc.incidentClass === "ownGoal") eventType = "OWN_GOAL";
+            else if (inc.incidentClass === "penalty") eventType = "PENALTY_SCORED";
+            else eventType = "GOAL";
+          } else if (inc.incidentType === "card") {
+            if (inc.incidentClass === "yellow") eventType = "YELLOW_CARD";
+            else if (inc.incidentClass === "red") eventType = "RED_CARD";
+            else if (inc.incidentClass === "yellowRed") eventType = "SECOND_YELLOW";
+          } else if (inc.incidentType === "substitution") {
+            eventType = "SUBSTITUTION";
+          }
+
+          if (eventType) {
+            let relatedPlayerId: number | null = null;
+            if (inc.playerIn?.id) {
+              relatedPlayerId = await this.findOrCreatePlayer(inc.playerIn);
+            }
+
+            await db.insert(matchEvents).values({
+              matchId,
+              teamId,
+              playerId,
+              relatedPlayerId,
+              type: eventType,
+              minute: inc.time || 0,
+              extraMinute: inc.addedTime || 0,
+              description: inc.reason || inc.text || null,
+            });
+          }
+        }
+      }
+
+      // 2. Lineups
+      const lineupsUrl = `https://api.sofascore.com/api/v1/event/${sofaEventId}/lineups`;
+      const lineupsData = await this.fetchJson<{
+        home?: { players?: any[] };
+        away?: { players?: any[] };
+      }>(lineupsUrl);
+
+      if (lineupsData?.home?.players || lineupsData?.away?.players) {
+        const processSide = async (sidePlayers: any[], teamId: number) => {
+          for (const item of sidePlayers) {
+            if (!item.player?.id) continue;
+            const pId = await this.findOrCreatePlayer(item.player);
+            const jersey = item.shirtNumber || (item.jerseyNumber ? parseInt(item.jerseyNumber, 10) : null);
+            await db.insert(matchLineups).values({
+              matchId,
+              teamId,
+              playerId: pId,
+              isStarter: !item.substitute,
+              jerseyNumber: jersey,
+              formationPosition: item.position || null,
+            }).onConflictDoNothing();
+          }
+        };
+
+        if (lineupsData.home?.players) await processSide(lineupsData.home.players, homeTeamId);
+        if (lineupsData.away?.players) await processSide(lineupsData.away.players, awayTeamId);
+      }
+    } catch {
+      // Ignora erro para não abortar fluxo principal
+    }
+  }
+
+  public static async findOrCreatePlayer(sofaPlayer: {
+    id: number;
+    name: string;
+    slug?: string;
+    shortName?: string;
+    position?: string;
+    country?: { name: string };
+    birthDate?: string;
+    height?: number;
+    weight?: number;
+  }): Promise<number> {
+    const fullName = sofaPlayer.name.trim();
+    const knownName = sofaPlayer.shortName?.trim() || fullName;
+
+    // Buscar se já existe pelo nome conhecido ou completo
+    const found = await db
+      .select()
+      .from(players)
+      .where(
+        or(
+          eq(players.knownName, knownName),
+          eq(players.knownName, fullName),
+          and(
+            eq(players.firstName, fullName.split(" ")[0] || fullName),
+            eq(players.lastName, fullName.split(" ").slice(1).join(" ") || fullName)
+          )
+        )
+      );
+
+    if (found.length > 0) {
+      return found[0].id;
+    }
+
+    const parts = fullName.split(" ");
+    const firstName = parts[0] || fullName;
+    const lastName = parts.slice(1).join(" ") || firstName;
+    const nationality = sofaPlayer.country?.name || "Brasil";
+    const primaryPosition = this.mapPosition(sofaPlayer.position);
+    const photoUrl = `https://api.sofascore.app/api/v1/player/${sofaPlayer.id}/image`;
+
+    const [inserted] = await db
+      .insert(players)
+      .values({
+        firstName,
+        lastName,
+        knownName,
+        nationality,
+        primaryPosition,
+        heightCm: sofaPlayer.height || null,
+        weightKg: sofaPlayer.weight || null,
+        photoUrl,
+      })
+      .returning();
+
+    return inserted.id;
+  }
+
+  private static mapPosition(sofaPos?: string): "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD" {
+    if (!sofaPos) return "FORWARD";
+    const p = sofaPos.toUpperCase();
+    if (p === "G" || p.includes("GOAL")) return "GOALKEEPER";
+    if (p === "D" || p.includes("DEF")) return "DEFENDER";
+    if (p === "M" || p.includes("MID")) return "MIDFIELDER";
+    return "FORWARD";
   }
 
   private static async findOrCreateTeam(

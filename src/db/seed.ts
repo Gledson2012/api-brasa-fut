@@ -12,13 +12,17 @@ import {
   matchStatistics,
   standings,
   apiKeys,
+  playerSeasonStatistics,
+  payments,
 } from "./schema.js";
 
 export async function seed(closeClient: boolean = true) {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
 
   // Limpar tabelas existentes (ordem reversa de dependências)
+  await db.delete(payments);
   await db.delete(apiKeys);
+  await db.delete(playerSeasonStatistics);
   await db.delete(matchStatistics);
   await db.delete(matchEvents);
   await db.delete(matchLineups);

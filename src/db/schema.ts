@@ -388,7 +388,76 @@ export const webhookDeliveries = pgTable(
 );
 
 // ----------------------------------------------------------------------------
-// 10. RELATIONS (DRIZZLE ORM)
+// 11. PLAYER SEASON STATISTICS (SCOUTS & ARTILHARIA)
+// ----------------------------------------------------------------------------
+export const playerSeasonStatistics = pgTable(
+  "player_season_statistics",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    playerId: bigint("player_id", { mode: "number" })
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    seasonId: bigint("season_id", { mode: "number" })
+      .notNull()
+      .references(() => seasons.id, { onDelete: "cascade" }),
+    teamId: bigint("team_id", { mode: "number" })
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    appearances: integer("appearances").default(0).notNull(),
+    matchesStarted: integer("matches_started").default(0).notNull(),
+    minutesPlayed: integer("minutes_played").default(0).notNull(),
+    goals: integer("goals").default(0).notNull(),
+    assists: integer("assists").default(0).notNull(),
+    yellowCards: integer("yellow_cards").default(0).notNull(),
+    redCards: integer("red_cards").default(0).notNull(),
+    rating: varchar("rating", { length: 10 }).default("0.0"),
+    expectedGoals: varchar("expected_goals", { length: 10 }).default("0.0"),
+    expectedAssists: varchar("expected_assists", { length: 10 }).default("0.0"),
+    shotsTotal: integer("shots_total").default(0).notNull(),
+    shotsOnTarget: integer("shots_on_target").default(0).notNull(),
+    keyPasses: integer("key_passes").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_player_season_stat").on(table.playerId, table.seasonId),
+    index("idx_player_season_goals").on(table.seasonId, table.goals),
+    index("idx_player_season_assists").on(table.seasonId, table.assists),
+  ]
+);
+
+// ----------------------------------------------------------------------------
+// 12. PAYMENTS / BILLING (PIX & MONETIZAÇÃO)
+// ----------------------------------------------------------------------------
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "PENDING",
+  "PAID",
+  "EXPIRED",
+  "CANCELLED",
+]);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    apiKeyId: bigint("api_key_id", { mode: "number" })
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    paymentId: varchar("payment_id", { length: 64 }).notNull().unique(),
+    targetPlan: apiPlanEnum("target_plan").notNull(),
+    amountCents: integer("amount_cents").notNull(), // R$ 49,90 = 4990
+    status: paymentStatusEnum("status").default("PENDING").notNull(),
+    pixQrCode: text("pix_qr_code").notNull(),
+    pixCopyPaste: text("pix_copy_paste").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("idx_payments_api_key_id").on(table.apiKeyId)]
+);
+
+// ----------------------------------------------------------------------------
+// 13. RELATIONS (DRIZZLE ORM)
 // ----------------------------------------------------------------------------
 export const venuesRelations = relations(venues, ({ many }) => ({
   teams: many(teams),
@@ -488,3 +557,29 @@ export const matchStatisticsRelations = relations(matchStatistics, ({ one }) => 
     references: [teams.id],
   }),
 }));
+
+export const playerSeasonStatisticsRelations = relations(
+  playerSeasonStatistics,
+  ({ one }) => ({
+    player: one(players, {
+      fields: [playerSeasonStatistics.playerId],
+      references: [players.id],
+    }),
+    season: one(seasons, {
+      fields: [playerSeasonStatistics.seasonId],
+      references: [seasons.id],
+    }),
+    team: one(teams, {
+      fields: [playerSeasonStatistics.teamId],
+      references: [teams.id],
+    }),
+  })
+);
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  apiKey: one(apiKeys, {
+    fields: [payments.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+

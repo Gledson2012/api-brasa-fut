@@ -21,6 +21,7 @@ import { liveRoutes } from "./routes/live.js";
 import { authRoutes } from "./routes/auth.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { syncRoutes } from "./routes/sync.js";
+import { billingRoutes } from "./routes/billing.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -54,6 +55,7 @@ export function buildApp() {
       },
       tags: [
         { name: "Autenticação & Planos", description: "Geração de chaves, limites e planos" },
+        { name: "Billing & Monetização Pix", description: "Cobranças Pix dinâmicas, webhooks de pagamento e upgrade de planos" },
         { name: "Webhooks", description: "Disparo e auditoria de notificações instantâneas" },
         { name: "Partidas", description: "Jogos, placares ao vivo, eventos e estatísticas" },
         { name: "Partidas - Operações em Tempo Real", description: "Disparo e sincronização de lances e placar" },
@@ -110,6 +112,7 @@ export function buildApp() {
         standings: "/api/v1/standings?seasonId=3",
         webhooks: "/api/v1/webhooks",
         syncSofascore: "/api/v1/sync/sofascore",
+        billingCheckout: "POST /api/v1/billing/checkout",
       },
     };
   });
@@ -119,6 +122,7 @@ export function buildApp() {
 
   // Registrar rotas modulares
   app.register(authRoutes, { prefix: "/api/v1/auth" });
+  app.register(billingRoutes, { prefix: "/api/v1/billing" });
   app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
   app.register(competitionRoutes, { prefix: "/api/v1/competitions" });
   app.register(teamRoutes, { prefix: "/api/v1/teams" });
