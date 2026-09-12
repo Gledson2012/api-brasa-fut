@@ -25,6 +25,8 @@ import { billingRoutes } from "./routes/billing.js";
 import { newsRoutes } from "./routes/news.js";
 import { searchRoutes } from "./routes/search.js";
 import { transfersRoutes } from "./routes/transfers.js";
+import { refereesRoutes } from "./routes/referees.js";
+import { exportRoutes } from "./routes/export.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -70,6 +72,8 @@ export function buildApp() {
         { name: "Notícias & Imprensa", description: "Feed de notícias de futebol em tempo real da ESPN Brasil" },
         { name: "Busca Global", description: "Busca unificada em clubes, atletas, competições e notícias" },
         { name: "Mercado da Bola & Transferências", description: "Histórico e movimentações de transferências de atletas entre clubes" },
+        { name: "Arbitragem & Juízes", description: "Scouts de árbitros, médias de cartões, faltas e tendências de apito" },
+        { name: "Exportação de Dados", description: "Download de tabelas, partidas e scouts em formato CSV" },
       ],
       components: {
         securitySchemes: {
@@ -130,8 +134,16 @@ export function buildApp() {
         matchMomentum: "/api/v1/matches/:id/momentum",
         matchShotMap: "/api/v1/matches/:id/shot-map",
         matchAbsences: "/api/v1/matches/:id/absences",
+        matchFantasy: "/api/v1/matches/:id/fantasy",
+        playerFantasy: "/api/v1/players/:id/fantasy",
         teamAbsences: "/api/v1/teams/:id/absences",
+        teamH2H: "/api/v1/teams/:team1Id/vs/:team2Id",
         competitionTotw: "/api/v1/competitions/:id/team-of-the-week?round=26",
+        standingsSimulate: "POST /api/v1/standings/simulate",
+        referees: "/api/v1/referees",
+        exportStandings: "/api/v1/export/standings?seasonId=1",
+        exportPlayers: "/api/v1/export/players?seasonId=1",
+        exportMatches: "/api/v1/export/matches?seasonId=1",
       },
     };
   });
@@ -154,6 +166,8 @@ export function buildApp() {
   app.register(newsRoutes, { prefix: "/api/v1/news" });
   app.register(searchRoutes, { prefix: "/api/v1/search" });
   app.register(transfersRoutes, { prefix: "/api/v1/transfers" });
+  app.register(refereesRoutes, { prefix: "/api/v1/referees" });
+  app.register(exportRoutes, { prefix: "/api/v1/export" });
 
   return app;
 }

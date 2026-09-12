@@ -16,6 +16,7 @@ import { realtimeBroker } from "../services/pubsub.js";
 import { requireAdminOrPlan } from "../middleware/auth.js";
 import { FCMService } from "../services/fcm.js";
 import { AnalyticsService } from "../services/analytics.js";
+import { FantasyService } from "../services/fantasy.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -556,6 +557,35 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       return cached;
     }
   );
+
+  // Engine de Pontuação Fantasy & Cartola FC da Partida
+  app.get(
+    "/:id/fantasy",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Pontuação Fantasy & Cartola FC de todos os atletas na partida",
+        description:
+          "Calcula a pontuação detalhada dos jogadores que atuaram na partida com base nas regras de scouts oficiais (gols +8.0, assistências +5.0, desarmes +1.2, SG +5.0, faltas, etc.).",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`match:${id}:fantasy`, 60, async () => {
+        return await FantasyService.getMatchFantasyScores(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Partida não encontrada para pontuação fantasy." });
+      }
+
+      return cached;
+    }
+  );
+
 
 
   // Endpoint de inserção de evento (Admin / Real-time trigger)

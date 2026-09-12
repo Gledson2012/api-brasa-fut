@@ -1258,6 +1258,38 @@
         }
       }
     },
+    "/api/v1/teams/{team1Id}/vs/{team2Id}": {
+      "get": {
+        "summary": "Raio-X Histórico de Duelos e Clássicos entre dois Clubes (Head-to-Head Geral)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Retorna o retrospecto histórico completo entre dois clubes de futebol (vitórias, empates, gols marcados, média de gols, maior goleada e lista dos últimos confrontos diretos).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "team1Id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "team2Id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/venues/": {
       "get": {
         "summary": "Listar todos os estádios",
@@ -1504,6 +1536,30 @@
           "Atletas"
         ],
         "description": "Retorna o currículo completo temporada a temporada do atleta, com totais acumulados de carreira (gols, assistências, minutos, clean sheets, defesas e cartões).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/players/{id}/fantasy": {
+      "get": {
+        "summary": "Histórico e médias de pontuação Fantasy & Cartola FC do Atleta",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Retorna as pontuações do atleta rodada a rodada, média na temporada, maior pontuação (mito da rodada) e menor pontuação.",
         "parameters": [
           {
             "schema": {
@@ -1892,6 +1948,30 @@
         }
       }
     },
+    "/api/v1/matches/{id}/fantasy": {
+      "get": {
+        "summary": "Pontuação Fantasy & Cartola FC de todos os atletas na partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Calcula a pontuação detalhada dos jogadores que atuaram na partida com base nas regras de scouts oficiais (gols +8.0, assistências +5.0, desarmes +1.2, SG +5.0, faltas, etc.).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/matches/{id}/score": {
       "patch": {
         "summary": "Atualizar placar e status do jogo em tempo real",
@@ -1997,6 +2077,63 @@
             "required": true
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/standings/simulate": {
+      "post": {
+        "summary": "Simulador de Tabela & Calculadora de Chances (Título, Libertadores e Rebaixamento)",
+        "tags": [
+          "Classificação"
+        ],
+        "description": "Permite enviar palpites para jogos futuros e recalcula a tabela final completa, com critérios de desempate oficiais e probabilidades matemáticas de Título, G-4 (Libertadores), G-6, Sul-Americana e Z-4 (Rebaixamento).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "seasonId": {
+                    "default": 1,
+                    "description": "ID da temporada (ex: 1 para Brasileirão)",
+                    "type": "number"
+                  },
+                  "predictions": {
+                    "default": [],
+                    "description": "Lista de palpites de placares simulados",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "matchId": {
+                          "type": "number"
+                        },
+                        "homeScore": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "awayScore": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "matchId",
+                        "homeScore",
+                        "awayScore"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response"
@@ -2498,6 +2635,152 @@
           }
         }
       }
+    },
+    "/api/v1/referees/": {
+      "get": {
+        "summary": "Listar árbitros e juízes com estatísticas resumidas",
+        "tags": [
+          "Arbitragem & Juízes"
+        ],
+        "description": "Retorna a relação de árbitros cadastrados nas competições, médias de cartões e tendências de apito.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Filtrar por nome do árbitro"
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/referees/{id}/stats": {
+      "get": {
+        "summary": "Scout detalhado e estatísticas de arbitragem",
+        "tags": [
+          "Arbitragem & Juízes"
+        ],
+        "description": "Médias de cartões amarelos, vermelhos, faltas marcadas por jogo, pênaltis assinalados e tendência de resultados (mandante vs visitante).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/export/standings": {
+      "get": {
+        "summary": "Exportar tabela de classificação em formato CSV (Excel)",
+        "tags": [
+          "Exportação de Dados"
+        ],
+        "description": "Gera arquivo .csv para download com a classificação oficial da liga.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/export/players": {
+      "get": {
+        "summary": "Exportar scouts e estatísticas de atletas em formato CSV",
+        "tags": [
+          "Exportação de Dados"
+        ],
+        "description": "Gera arquivo .csv para download com scouts completos de jogadores por liga ou temporada.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/export/matches": {
+      "get": {
+        "summary": "Exportar calendário e resultados de partidas em formato CSV",
+        "tags": [
+          "Exportação de Dados"
+        ],
+        "description": "Gera arquivo .csv para download com todos os confrontos da temporada.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -2557,6 +2840,14 @@
     {
       "name": "Mercado da Bola & Transferências",
       "description": "Histórico e movimentações de transferências de atletas entre clubes"
+    },
+    {
+      "name": "Arbitragem & Juízes",
+      "description": "Scouts de árbitros, médias de cartões, faltas e tendências de apito"
+    },
+    {
+      "name": "Exportação de Dados",
+      "description": "Download de tabelas, partidas e scouts em formato CSV"
     }
   ]
 }

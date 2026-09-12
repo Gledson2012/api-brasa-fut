@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { standings, teams, matches } from "../db/schema.js";
 import { eq, asc, and, inArray } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { SimulationService } from "../services/simulation.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -245,4 +246,35 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Simulador de Tabela e Calculadora de Probabilidades
+  app.post(
+    "/simulate",
+    {
+      schema: {
+        tags: ["Classificação"],
+        summary: "Simulador de Tabela & Calculadora de Chances (Título, Libertadores e Rebaixamento)",
+        description:
+          "Permite enviar palpites para jogos futuros e recalcula a tabela final completa, com critérios de desempate oficiais e probabilidades matemáticas de Título, G-4 (Libertadores), G-6, Sul-Americana e Z-4 (Rebaixamento).",
+        body: z.object({
+          seasonId: z.number().default(1).describe("ID da temporada (ex: 1 para Brasileirão)"),
+          predictions: z
+            .array(
+              z.object({
+                matchId: z.number(),
+                homeScore: z.number().min(0),
+                awayScore: z.number().min(0),
+              })
+            )
+            .default([])
+            .describe("Lista de palpites de placares simulados"),
+        }),
+      },
+    },
+    async (request) => {
+      const { seasonId, predictions } = request.body;
+      return await SimulationService.simulateStandings(seasonId, predictions);
+    }
+  );
 };
+

@@ -347,5 +347,120 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
       return cached;
     }
   );
+
+  // Raio-X Histórico de Duelos e Clássicos (Duelo de Clubes)
+  app.get(
+    "/:team1Id/vs/:team2Id",
+    {
+      schema: {
+        tags: ["Clubes"],
+        summary: "Raio-X Histórico de Duelos e Clássicos entre dois Clubes (Head-to-Head Geral)",
+        description:
+          "Retorna o retrospecto histórico completo entre dois clubes de futebol (vitórias, empates, gols marcados, média de gols, maior goleada e lista dos últimos confrontos diretos).",
+        params: z.object({
+          team1Id: z.coerce.number(),
+          team2Id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { team1Id, team2Id } = request.params;
+
+      if (team1Id === team2Id) {
+        return reply.status(400).send({ error: "Informe dois clubes distintos para comparação." });
+      }
+
+      const cacheKey = `teams:h2h:${team1Id}:vs:${team2Id}`;
+
+      return await cache.wrap(cacheKey, 180, async () => {
+        const [team1] = await db.select().from(teams).where(eq(teams.id, team1Id));
+        const [team2] = await db.select().from(teams).where(eq(teams.id, team2Id));
+
+        if (!team1 || !team2) {
+          return reply.status(404).send({ error: "Um ou ambos os clubes informados não foram encontrados." });
+        }
+
+        const historical = await db
+          .select({
+            id: matches.id,
+            round: matches.round,
+            kickoffTime: matches.kickoffTime,
+            status: matches.status,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+            competitionName: competitions.name,
+          })
+          .from(matches)
+          .innerJoin(seasons, eq(matches.seasonId, seasons.id))
+          .innerJoin(competitions, eq(seasons.competitionId, competitions.id))
+          .where(
+            and(
+              eq(matches.status, "FINISHED"),
+              or(
+                and(eq(matches.homeTeamId, team1Id), eq(matches.awayTeamId, team2Id)),
+                and(eq(matches.homeTeamId, team2Id), eq(matches.awayTeamId, team1Id))
+              )
+            )
+          )
+          .orderBy(desc(matches.kickoffTime))
+          .limit(20);
+
+        let t1Wins = 0;
+        let t2Wins = 0;
+        let draws = 0;
+        let t1Goals = 0;
+        let t2Goals = 0;
+        let biggestWin = null;
+        let maxDiff = -1;
+
+        for (const m of historical) {
+          const isT1Home = m.homeTeamId === team1Id;
+          const score1 = isT1Home ? (m.homeScore || 0) : (m.awayScore || 0);
+          const score2 = isT1Home ? (m.awayScore || 0) : (m.homeScore || 0);
+
+          t1Goals += score1;
+          t2Goals += score2;
+
+          const diff = Math.abs(score1 - score2);
+          if (diff > maxDiff) {
+            maxDiff = diff;
+            biggestWin = {
+              matchId: m.id,
+              winner: score1 > score2 ? team1.shortName || team1.name : team2.shortName || team2.name,
+              score: `${m.homeScore} - ${m.awayScore}`,
+              date: m.kickoffTime,
+              competition: m.competitionName,
+            };
+          }
+
+          if (score1 > score2) t1Wins++;
+          else if (score2 > score1) t2Wins++;
+          else draws++;
+        }
+
+        const totalGames = historical.length;
+        const avgGoals = totalGames > 0 ? Number(((t1Goals + t2Goals) / totalGames).toFixed(2)) : 0;
+
+        return {
+          team1: { id: team1.id, name: team1.name, shortName: team1.shortName, logoUrl: team1.logoUrl },
+          team2: { id: team2.id, name: team2.name, shortName: team2.shortName, logoUrl: team2.logoUrl },
+          summary: {
+            totalMatches: totalGames,
+            team1Wins: t1Wins,
+            team2Wins: t2Wins,
+            draws,
+            team1Goals: t1Goals,
+            team2Goals: t2Goals,
+            averageGoalsPerMatch: avgGoals,
+            biggestWin,
+          },
+          recentMatches: historical.slice(0, 10),
+        };
+      });
+    }
+  );
 };
+
 

@@ -526,7 +526,33 @@ export const teamAbsences = pgTable(
 );
 
 // ----------------------------------------------------------------------------
-// 15. RELATIONS (DRIZZLE ORM)
+// 15. REFEREES (ARBITRAGEM & SCOUTS DE JUÍZES)
+// ----------------------------------------------------------------------------
+export const referees = pgTable(
+  "referees",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    name: varchar("name", { length: 150 }).notNull(),
+    nationality: varchar("nationality", { length: 100 }).default("Brasil").notNull(),
+    federation: varchar("federation", { length: 100 }).default("CBF / FIFA"),
+    matchesCount: integer("matches_count").default(0).notNull(),
+    yellowCardsTotal: integer("yellow_cards_total").default(0).notNull(),
+    redCardsTotal: integer("red_cards_total").default(0).notNull(),
+    foulsAvg: varchar("fouls_avg", { length: 10 }).default("27.4"),
+    penaltiesTotal: integer("penalties_total").default(0).notNull(),
+    homeWinPct: integer("home_win_pct").default(48).notNull(),
+    awayWinPct: integer("away_win_pct").default(26).notNull(),
+    drawPct: integer("draw_pct").default(26).notNull(),
+    photoUrl: text("photo_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_referees_name").on(table.name),
+  ]
+);
+
+// ----------------------------------------------------------------------------
+// 16. RELATIONS (DRIZZLE ORM)
 // ----------------------------------------------------------------------------
 export const venuesRelations = relations(venues, ({ many }) => ({
   teams: many(teams),

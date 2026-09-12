@@ -11,6 +11,7 @@ import {
 } from "../db/schema.js";
 import { eq, ilike, and, or } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { FantasyService } from "../services/fantasy.js";
 
 export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar atletas com filtros
@@ -462,4 +463,33 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Histórico de Pontuação Fantasy & Cartola FC do Atleta
+  app.get(
+    "/:id/fantasy",
+    {
+      schema: {
+        tags: ["Atletas"],
+        summary: "Histórico e médias de pontuação Fantasy & Cartola FC do Atleta",
+        description:
+          "Retorna as pontuações do atleta rodada a rodada, média na temporada, maior pontuação (mito da rodada) e menor pontuação.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`player:${id}:fantasy`, 120, async () => {
+        return await FantasyService.getPlayerFantasyHistory(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Atleta não encontrado." });
+      }
+
+      return cached;
+    }
+  );
 };
+

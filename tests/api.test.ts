@@ -643,6 +643,155 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(player1.tacticalRole);
     assert.ok(player1.roundRating);
   });
+
+  test("30. Simulador de Tabela e Probabilidades (/api/v1/standings/simulate)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/standings/simulate",
+      headers: { "x-api-key": DEMO_KEY },
+      payload: {
+        seasonId: 3,
+        predictions: [
+          { matchId: 33, homeScore: 3, awayScore: 0 },
+          { matchId: 34, homeScore: 1, awayScore: 2 },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.seasonId, 3);
+    assert.equal(body.simulatedMatchesCount, 2);
+    assert.ok(Array.isArray(body.standings));
+    assert.ok(body.standings.length > 0);
+    const topTeam = body.standings[0];
+    assert.equal(topTeam.currentPosition, 1);
+    assert.ok(topTeam.probabilities);
+    assert.ok(typeof topTeam.probabilities.championPct === "number");
+    assert.ok(typeof topTeam.probabilities.libertadoresPct === "number");
+    assert.ok(typeof topTeam.probabilities.relegationPct === "number");
+  });
+
+  test("31. Engine de Pontuação Fantasy da Partida (/api/v1/matches/:id/fantasy)", async () => {
+    const matchesRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const matchesList = JSON.parse(matchesRes.payload);
+    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${match.id}/fantasy`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, match.id);
+    assert.ok(body.mvpFantasy);
+    assert.ok(Array.isArray(body.homePlayers));
+    assert.ok(Array.isArray(body.awayPlayers));
+    const p1 = body.homePlayers[0];
+    assert.ok(p1.player.name);
+    assert.ok(typeof p1.fantasyScore === "number");
+    assert.ok(p1.breakdown);
+  });
+
+  test("32. Histórico de Pontuação Fantasy do Atleta (/api/v1/players/:id/fantasy)", async () => {
+    const playersRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const player = JSON.parse(playersRes.payload).data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/players/${player.id}/fantasy`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.player.id, player.id);
+    assert.ok(body.seasonSummary);
+    assert.ok(typeof body.seasonSummary.averageFantasyScore === "number");
+    assert.ok(Array.isArray(body.rounds));
+  });
+
+  test("33. Raio-X Histórico de Duelo de Clubes (/api/v1/teams/:team1Id/vs/:team2Id)", async () => {
+    const teamsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams?limit=2",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const teamsList = JSON.parse(teamsRes.payload);
+    const t1 = teamsList[0].id;
+    const t2 = teamsList[1].id;
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/teams/${t1}/vs/${t2}`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.team1.id, t1);
+    assert.equal(body.team2.id, t2);
+    assert.ok(body.summary);
+    assert.ok(typeof body.summary.totalMatches === "number");
+    assert.ok(typeof body.summary.averageGoalsPerMatch === "number");
+    assert.ok(Array.isArray(body.recentMatches));
+  });
+
+  test("34. Central de Árbitros e Scouts de Arbitragem (/api/v1/referees)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/referees",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.total > 0);
+    assert.ok(Array.isArray(body.data));
+    const ref1 = body.data[0];
+    assert.ok(ref1.name);
+    assert.ok(ref1.stats);
+    assert.ok(typeof ref1.stats.yellowCardsPerMatch === "number");
+
+    // Detalhes do árbitro
+    const statsRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/referees/${ref1.id}/stats`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(statsRes.statusCode, 200);
+    const statsBody = JSON.parse(statsRes.payload);
+    assert.equal(statsBody.referee.id, ref1.id);
+    assert.ok(statsBody.scout.profile);
+    assert.ok(statsBody.scout.matchOutcomes);
+  });
+
+  test("35. Exportação de Dados em Formato CSV (/api/v1/export/*)", async () => {
+    // Exportar Tabela
+    const stdRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/export/standings?seasonId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(stdRes.statusCode, 200);
+    assert.ok(stdRes.headers["content-type"]?.includes("text/csv"));
+    assert.ok(stdRes.payload.includes("Posicao,Clube,Sigla,Pontos"));
+
+    // Exportar Atletas
+    const plyRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/export/players?seasonId=1&limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(plyRes.statusCode, 200);
+    assert.ok(plyRes.headers["content-type"]?.includes("text/csv"));
+    assert.ok(plyRes.payload.includes("ID,Nome,Clube,Posicao"));
+  });
 });
 
 

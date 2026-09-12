@@ -445,6 +445,24 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         );
         CREATE INDEX IF NOT EXISTS idx_team_absences_team_id ON team_absences (team_id);
         CREATE INDEX IF NOT EXISTS idx_team_absences_player_id ON team_absences (player_id);
+
+        CREATE TABLE IF NOT EXISTS referees (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          name VARCHAR(150) NOT NULL,
+          nationality VARCHAR(100) DEFAULT 'Brasil' NOT NULL,
+          federation VARCHAR(100) DEFAULT 'CBF / FIFA',
+          matches_count INTEGER DEFAULT 0 NOT NULL,
+          yellow_cards_total INTEGER DEFAULT 0 NOT NULL,
+          red_cards_total INTEGER DEFAULT 0 NOT NULL,
+          fouls_avg VARCHAR(10) DEFAULT '27.4',
+          penalties_total INTEGER DEFAULT 0 NOT NULL,
+          home_win_pct INTEGER DEFAULT 48 NOT NULL,
+          away_win_pct INTEGER DEFAULT 26 NOT NULL,
+          draw_pct INTEGER DEFAULT 26 NOT NULL,
+          photo_url TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_referees_name ON referees (name);
       `);
 
       return {
