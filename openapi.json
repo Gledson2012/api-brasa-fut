@@ -1134,6 +1134,41 @@
         }
       }
     },
+    "/api/v1/teams/{id}/fixtures": {
+      "get": {
+        "summary": "Calendário do clube (Próximos jogos, últimos resultados e forma recente)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Retorna os próximos jogos agendados, últimos resultados consolidados e a sequência de forma recente (Vitórias, Empates e Derrotas: W, D, L) do clube.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 5,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/venues/": {
       "get": {
         "summary": "Listar todos os estádios",
@@ -1266,6 +1301,49 @@
             "in": "query",
             "name": "page",
             "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/players/compare": {
+      "get": {
+        "summary": "Comparador Raio-X de Atletas (Head-to-Head)",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Compara dois jogadores lado a lado na temporada atual ou específica, calculando métricas ofensivas, defensivas e apontando as vantagens estatísticas de cada um.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "p1",
+            "required": true,
+            "description": "ID do primeiro atleta"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "p2",
+            "required": true,
+            "description": "ID do segundo atleta"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false,
+            "description": "ID da temporada (opcional)"
           }
         ],
         "responses": {
@@ -1694,6 +1772,30 @@
         }
       }
     },
+    "/api/v1/standings/live": {
+      "get": {
+        "summary": "Obter tabela de classificação virtual em tempo real (Live Standings)",
+        "tags": [
+          "Classificação"
+        ],
+        "description": "Recalcula os pontos, saldo de gols e posições da tabela dinamicamente considerando os placares dos jogos que estão acontecendo no momento.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/standings/": {
       "get": {
         "summary": "Obter tabela de classificação de uma temporada",
@@ -2096,6 +2198,121 @@
           }
         }
       }
+    },
+    "/api/v1/search/": {
+      "get": {
+        "summary": "Busca global unificada (Clubes, Atletas, Competições e Notícias)",
+        "tags": [
+          "Busca Global"
+        ],
+        "description": "Pesquisa simultaneamente em clubes, atletas, ligas e notícias com uma única requisição. Ideal para alimentar barras de pesquisa de aplicativos móveis.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 2
+            },
+            "in": "query",
+            "name": "q",
+            "required": true
+          },
+          {
+            "schema": {
+              "default": 5,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/transfers/": {
+      "get": {
+        "summary": "Consultar movimentações do Mercado da Bola e transferências confirmadas",
+        "tags": [
+          "Mercado da Bola & Transferências"
+        ],
+        "description": "Retorna o histórico e as últimas transferências de atletas entre clubes (compras definitivas, empréstimos e contratações livres), incluindo valores envolvidos e resumo do mercado.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Filtrar por clube (origem ou destino)"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "playerId",
+            "required": false,
+            "description": "Filtrar por atleta"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PERMANENT",
+                "LOAN",
+                "FREE_AGENT",
+                "END_OF_LOAN"
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "description": "Tipo de negociação"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "Buscar por atleta ou clube"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -2147,6 +2364,14 @@
     {
       "name": "Notícias & Imprensa",
       "description": "Feed de notícias de futebol em tempo real da ESPN Brasil"
+    },
+    {
+      "name": "Busca Global",
+      "description": "Busca unificada em clubes, atletas, competições e notícias"
+    },
+    {
+      "name": "Mercado da Bola & Transferências",
+      "description": "Histórico e movimentações de transferências de atletas entre clubes"
     }
   ]
 }

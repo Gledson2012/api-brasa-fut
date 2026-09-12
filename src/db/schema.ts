@@ -463,7 +463,43 @@ export const payments = pgTable(
 );
 
 // ----------------------------------------------------------------------------
-// 13. RELATIONS (DRIZZLE ORM)
+// 13. TRANSFERS (MERCADO DA BOLA)
+// ----------------------------------------------------------------------------
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    playerId: bigint("player_id", { mode: "number" }).references(() => players.id, {
+      onDelete: "set null",
+    }),
+    playerName: varchar("player_name", { length: 150 }).notNull(),
+    fromTeamId: bigint("from_team_id", { mode: "number" }).references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    fromTeamName: varchar("from_team_name", { length: 120 }).notNull(),
+    toTeamId: bigint("to_team_id", { mode: "number" }).references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    toTeamName: varchar("to_team_name", { length: 120 }).notNull(),
+    type: varchar("type", { length: 50 }).notNull().default("PERMANENT"), // PERMANENT, LOAN, FREE_AGENT, END_OF_LOAN
+    transferDate: date("transfer_date").notNull(),
+    feeAmount: varchar("fee_amount", { length: 50 }),
+    marketValue: varchar("market_value", { length: 50 }),
+    contractUntil: date("contract_until"),
+    position: varchar("position", { length: 50 }),
+    photoUrl: text("photo_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_transfers_player_id").on(table.playerId),
+    index("idx_transfers_from_team_id").on(table.fromTeamId),
+    index("idx_transfers_to_team_id").on(table.toTeamId),
+    index("idx_transfers_date").on(table.transferDate),
+  ]
+);
+
+// ----------------------------------------------------------------------------
+// 14. RELATIONS (DRIZZLE ORM)
 // ----------------------------------------------------------------------------
 export const venuesRelations = relations(venues, ({ many }) => ({
   teams: many(teams),
@@ -588,4 +624,22 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     references: [apiKeys.id],
   }),
 }));
+
+export const transfersRelations = relations(transfers, ({ one }) => ({
+  player: one(players, {
+    fields: [transfers.playerId],
+    references: [players.id],
+  }),
+  fromTeam: one(teams, {
+    fields: [transfers.fromTeamId],
+    references: [teams.id],
+    relationName: "fromTeam",
+  }),
+  toTeam: one(teams, {
+    fields: [transfers.toTeamId],
+    references: [teams.id],
+    relationName: "toTeam",
+  }),
+}));
+
 

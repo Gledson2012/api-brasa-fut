@@ -386,6 +386,111 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       assert.ok(found.hasStandings === true);
     }
   });
+
+  test("20. Busca Global Unificada (/api/v1/search?q=Flamengo)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/search?q=Flamengo&limit=3",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.query, "Flamengo");
+    assert.ok(body.counts);
+    assert.ok(Array.isArray(body.teams));
+    assert.ok(Array.isArray(body.players));
+    assert.ok(Array.isArray(body.competitions));
+    assert.ok(Array.isArray(body.news));
+  });
+
+  test("21. Calendário e Forma Recente do Clube (/api/v1/teams/:id/fixtures)", async () => {
+    // Buscar primeiro time da base
+    const teamsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const teamsList = JSON.parse(teamsRes.payload);
+    const firstTeam = Array.isArray(teamsList) ? teamsList[0] : teamsList.data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/teams/${firstTeam.id}/fixtures?limit=5`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.team);
+    assert.equal(body.team.id, firstTeam.id);
+    assert.ok(Array.isArray(body.form));
+    assert.ok(Array.isArray(body.pastMatches));
+    assert.ok(Array.isArray(body.nextMatches));
+  });
+
+  test("22. Comparador Raio-X de Atletas (/api/v1/players/compare)", async () => {
+    const playersRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players?limit=2",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const playerList = JSON.parse(playersRes.payload).data;
+    const p1 = playerList[0].id;
+    const p2 = playerList[1].id;
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/players/compare?p1=${p1}&p2=${p2}`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.player1);
+    assert.ok(body.player2);
+    assert.equal(body.player1.id, p1);
+    assert.equal(body.player2.id, p2);
+    assert.ok(body.player1.stats);
+    assert.ok(body.player2.stats);
+    assert.ok(typeof body.player1.stats.goalsPer90 === "number");
+    assert.ok(body.statisticalEdge);
+  });
+
+  test("23. Tabela Virtual em Tempo Real (/api/v1/standings/live)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/standings/live?seasonId=3",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.seasonId, 3);
+    assert.ok(typeof body.liveMatchesCount === "number");
+    assert.ok(typeof body.hasLiveChanges === "boolean");
+    assert.ok(Array.isArray(body.standings));
+    if (body.standings.length > 0) {
+      assert.ok(["UP", "DOWN", "SAME"].includes(body.standings[0].movement));
+      assert.ok(typeof body.standings[0].movementDelta === "number");
+    }
+  });
+
+  test("24. Mercado da Bola e Transferências (/api/v1/transfers)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/transfers?limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.total > 0);
+    assert.ok(Array.isArray(body.data));
+    assert.ok(body.marketSummary);
+    const transfer = body.data[0];
+    assert.ok(transfer.player.name);
+    assert.ok(transfer.fromTeam.name);
+    assert.ok(transfer.toTeam.name);
+    assert.ok(transfer.type);
+    assert.ok(transfer.transferDate);
+  });
 });
+
 
 

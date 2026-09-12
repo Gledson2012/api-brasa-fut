@@ -23,6 +23,8 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { syncRoutes } from "./routes/sync.js";
 import { billingRoutes } from "./routes/billing.js";
 import { newsRoutes } from "./routes/news.js";
+import { searchRoutes } from "./routes/search.js";
+import { transfersRoutes } from "./routes/transfers.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -66,6 +68,8 @@ export function buildApp() {
         { name: "Competições", description: "Ligas, copas e temporadas" },
         { name: "Estádios", description: "Praças esportivas, capacidade e cidades" },
         { name: "Notícias & Imprensa", description: "Feed de notícias de futebol em tempo real da ESPN Brasil" },
+        { name: "Busca Global", description: "Busca unificada em clubes, atletas, competições e notícias" },
+        { name: "Mercado da Bola & Transferências", description: "Histórico e movimentações de transferências de atletas entre clubes" },
       ],
       components: {
         securitySchemes: {
@@ -107,16 +111,21 @@ export function buildApp() {
         authPlans: "GET /api/v1/auth/plans",
         competitions: "/api/v1/competitions",
         teams: "/api/v1/teams",
+        teamFixtures: "/api/v1/teams/:id/fixtures",
         venues: "/api/v1/venues",
         players: "/api/v1/players",
+        playerCompare: "/api/v1/players/compare?p1=X&p2=Y",
         matches: "/api/v1/matches",
         matchesLive: "/api/v1/matches/live",
         standings: "/api/v1/standings?seasonId=3",
+        standingsLive: "/api/v1/standings/live?seasonId=3",
         webhooks: "/api/v1/webhooks",
         syncSofascore: "/api/v1/sync/sofascore",
         billingCheckout: "POST /api/v1/billing/checkout",
         news: "/api/v1/news",
         newsLeagues: "/api/v1/news/leagues",
+        search: "/api/v1/search?q=Flamengo",
+        transfers: "/api/v1/transfers",
       },
     };
   });
@@ -137,6 +146,8 @@ export function buildApp() {
   app.register(liveRoutes, { prefix: "/api/v1/live" });
   app.register(syncRoutes, { prefix: "/api/v1/sync" });
   app.register(newsRoutes, { prefix: "/api/v1/news" });
+  app.register(searchRoutes, { prefix: "/api/v1/search" });
+  app.register(transfersRoutes, { prefix: "/api/v1/transfers" });
 
   return app;
 }

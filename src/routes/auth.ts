@@ -408,6 +408,28 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS transfers (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+          player_name VARCHAR(150) NOT NULL,
+          from_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
+          from_team_name VARCHAR(120) NOT NULL,
+          to_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
+          to_team_name VARCHAR(120) NOT NULL,
+          type VARCHAR(50) DEFAULT 'PERMANENT' NOT NULL,
+          transfer_date DATE NOT NULL,
+          fee_amount VARCHAR(50),
+          market_value VARCHAR(50),
+          contract_until DATE,
+          position VARCHAR(50),
+          photo_url TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_transfers_player_id ON transfers (player_id);
+        CREATE INDEX IF NOT EXISTS idx_transfers_from_team_id ON transfers (from_team_id);
+        CREATE INDEX IF NOT EXISTS idx_transfers_to_team_id ON transfers (to_team_id);
+        CREATE INDEX IF NOT EXISTS idx_transfers_date ON transfers (transfer_date);
       `);
 
       return {
