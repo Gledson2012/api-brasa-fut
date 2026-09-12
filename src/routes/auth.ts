@@ -357,12 +357,57 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
           updated_at = NOW();
       `;
 
-      // 3. Garantir colunas de clean sheets e defesas em player_season_statistics
+      // 3. Garantir tabela player_season_statistics com todas as colunas de scouts
       await client.unsafe(`
-        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS clean_sheets INTEGER DEFAULT 0 NOT NULL;
-        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS saves INTEGER DEFAULT 0 NOT NULL;
-        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS goals_conceded INTEGER DEFAULT 0 NOT NULL;
-        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS penalty_saves INTEGER DEFAULT 0 NOT NULL;
+        CREATE TABLE IF NOT EXISTS player_season_statistics (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+          team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          appearances INTEGER DEFAULT 0 NOT NULL,
+          matches_started INTEGER DEFAULT 0 NOT NULL,
+          minutes_played INTEGER DEFAULT 0 NOT NULL,
+          goals INTEGER DEFAULT 0 NOT NULL,
+          assists INTEGER DEFAULT 0 NOT NULL,
+          yellow_cards INTEGER DEFAULT 0 NOT NULL,
+          red_cards INTEGER DEFAULT 0 NOT NULL,
+          rating VARCHAR(10) DEFAULT '0.0',
+          expected_goals VARCHAR(10) DEFAULT '0.0',
+          expected_assists VARCHAR(10) DEFAULT '0.0',
+          shots_total INTEGER DEFAULT 0 NOT NULL,
+          shots_on_target INTEGER DEFAULT 0 NOT NULL,
+          key_passes INTEGER DEFAULT 0 NOT NULL,
+          clean_sheets INTEGER DEFAULT 0 NOT NULL,
+          saves INTEGER DEFAULT 0 NOT NULL,
+          goals_conceded INTEGER DEFAULT 0 NOT NULL,
+          penalty_saves INTEGER DEFAULT 0 NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT uq_player_season_stat UNIQUE (player_id, season_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_player_season_goals ON player_season_statistics (season_id, goals);
+        CREATE INDEX IF NOT EXISTS idx_player_season_assists ON player_season_statistics (season_id, assists);
+        CREATE INDEX IF NOT EXISTS idx_player_season_clean_sheets ON player_season_statistics (season_id, clean_sheets);
+
+        DO $$ BEGIN
+          CREATE TYPE payment_status AS ENUM ('PENDING', 'PAID', 'EXPIRED', 'CANCELLED');
+        EXCEPTION
+          WHEN duplicate_object THEN null;
+        END $$;
+
+        CREATE TABLE IF NOT EXISTS payments (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          api_key_id BIGINT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+          payment_id VARCHAR(64) NOT NULL UNIQUE,
+          target_plan api_plan NOT NULL,
+          amount_cents INTEGER NOT NULL,
+          status payment_status DEFAULT 'PENDING' NOT NULL,
+          pix_qr_code TEXT NOT NULL,
+          pix_copy_paste TEXT NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          paid_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `);
 
       return {
