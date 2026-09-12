@@ -42,7 +42,29 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const result = await SofascoreSyncService.sync(false);
+      const { liveOnly, force, leagues } = (request.query || {}) as {
+        liveOnly?: string;
+        force?: string;
+        leagues?: string;
+      };
+      const result = await SofascoreSyncService.sync(force === "true", {
+        liveOnly: liveOnly === "true",
+        leagues: leagues ? leagues.split(",") : undefined,
+      });
+      return result;
+    }
+  );
+
+  app.get(
+    "/live",
+    {
+      schema: {
+        tags: ["Sincronização"],
+        summary: "Sincronização ultra-rápida (sub-segundo) apenas das partidas ao vivo",
+      },
+    },
+    async () => {
+      const result = await SofascoreSyncService.syncLiveMatchesDirect();
       return result;
     }
   );
@@ -137,7 +159,14 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
-      const result = await SofascoreSyncService.sync(true);
+      const { liveOnly, leagues } = (request.query || {}) as {
+        liveOnly?: string;
+        leagues?: string;
+      };
+      const result = await SofascoreSyncService.sync(true, {
+        liveOnly: liveOnly === "true",
+        leagues: leagues ? leagues.split(",") : undefined,
+      });
       return result;
     }
   );
@@ -158,6 +187,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
         standings?: any[];
         currentRound?: number;
         competitionCode?: string;
+        competitionMeta?: any;
       };
 
       if (!body || (!body.events && !body.standings)) {
@@ -171,7 +201,8 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
         body.events || [],
         body.standings || [],
         body.currentRound || 27,
-        body.competitionCode || "BRA-1"
+        body.competitionCode || "BRA-1",
+        body.competitionMeta
       );
 
       return result;

@@ -223,6 +223,68 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(body.payload.notification.title.includes("CORINTHIANS"));
     assert.ok(body.payload.notification.body.includes("Memphis Depay"));
   });
+
+  test("12. Sincronização ultra-rápida de partidas ao vivo (/api/v1/sync/live)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/sync/live",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.success, true);
+    assert.equal(typeof body.liveMatchesCount, "number");
+    assert.equal(typeof body.eventsProcessed, "number");
+  });
+
+  test("13. Receber e persistir eventos de push do Scraper Multi-Liga (/api/v1/sync/push)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/sync/push",
+      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      payload: {
+        competitionCode: "PL",
+        currentRound: 4,
+        competitionMeta: {
+          name: "Premier League",
+          country: "Inglaterra",
+          type: "LEAGUE",
+          tournamentId: 17,
+          seasonName: "2026/2027",
+        },
+        events: [
+          {
+            id: 9999001,
+            slug: "arsenal-chelsea",
+            startTimestamp: 1789243200,
+            status: { code: 100, description: "Ended", type: "finished" },
+            homeTeam: { id: 42, name: "Arsenal", shortName: "Arsenal", nameCode: "ARS", country: { name: "Inglaterra" } },
+            awayTeam: { id: 38, name: "Chelsea", shortName: "Chelsea", nameCode: "CHE", country: { name: "Inglaterra" } },
+            homeScore: { current: 2, display: 2 },
+            awayScore: { current: 1, display: 1 },
+          },
+        ],
+        standings: [
+          {
+            position: 1,
+            team: { id: 42, name: "Arsenal", shortName: "Arsenal", nameCode: "ARS" },
+            points: 12,
+            matches: 4,
+            wins: 4,
+            draws: 0,
+            losses: 0,
+            scoresFor: 10,
+            scoresAgainst: 2,
+          },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.success, true);
+    assert.ok(body.matchesSynced >= 1);
+    assert.ok(body.standingsSynced >= 1);
+  });
 });
 
 
