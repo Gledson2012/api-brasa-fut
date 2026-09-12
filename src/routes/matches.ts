@@ -14,6 +14,7 @@ import {
 import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
 import { requireAdminOrPlan } from "../middleware/auth.js";
+import { FCMService } from "../services/fcm.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -530,6 +531,27 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
               awayScore: newAwayScore,
             },
           });
+
+          // Disparar Notificação Push via FCM para o tópico do time (ex: /topics/team_1957)
+          const scoringTeamId = body.type === "OWN_GOAL" 
+            ? (body.teamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId)
+            : body.teamId;
+
+          const [scoringTeam] = await db.select().from(teams).where(eq(teams.id, scoringTeamId));
+          const opponentTeamId = scoringTeamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId;
+          const [opponentTeam] = await db.select().from(teams).where(eq(teams.id, opponentTeamId));
+          const [scorer] = await db.select().from(players).where(eq(players.id, body.playerId));
+
+          FCMService.sendGoalNotification({
+            matchId: id,
+            teamId: scoringTeamId,
+            teamName: scoringTeam?.shortName || scoringTeam?.name || `Time ${scoringTeamId}`,
+            opponentName: opponentTeam?.shortName || opponentTeam?.name,
+            minute: body.minute,
+            scorerName: scorer?.knownName || (scorer ? `${scorer.firstName} ${scorer.lastName}`.trim() : undefined),
+            homeScore: newHomeScore,
+            awayScore: newAwayScore,
+          }).catch((err) => console.warn("[FCM] Erro ao disparar push:", err));
         }
       }
 

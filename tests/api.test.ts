@@ -199,5 +199,30 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.equal(body.plan, "ENTERPRISE");
     assert.equal(body.rateLimitPerMinute, 1000);
   });
+
+  test("11. Disparo de Notificação Push FCM de Gol para tópico de time", async () => {
+    const pushRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/live/test-fcm-goal",
+      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      payload: {
+        teamId: 1957,
+        teamName: "Corinthians",
+        opponentName: "Palmeiras",
+        minute: 88,
+        scorerName: "Memphis Depay",
+        homeScore: 1,
+        awayScore: 0,
+        matchId: 10,
+      },
+    });
+    assert.equal(pushRes.statusCode, 200);
+    const body = JSON.parse(pushRes.payload);
+    assert.equal(body.success, true);
+    assert.equal(body.topic, "team_1957");
+    assert.ok(body.payload.notification.title.includes("CORINTHIANS"));
+    assert.ok(body.payload.notification.body.includes("Memphis Depay"));
+  });
 });
+
 

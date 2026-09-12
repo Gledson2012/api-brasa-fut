@@ -50,4 +50,54 @@ export const liveRoutes: FastifyPluginAsync = async (app) => {
     const result = MatchSimulator.stop(matchId);
     return result;
   });
+
+  // Disparar teste de Notificação Push FCM para o time (ex: /topics/team_1957)
+  app.post("/test-fcm-goal", async (request, reply) => {
+    const body = (request.body as {
+      teamId?: number;
+      teamName?: string;
+      opponentName?: string;
+      minute?: number;
+      scorerName?: string;
+      homeScore?: number;
+      awayScore?: number;
+      matchId?: number;
+    }) || {};
+
+    const { FCMService } = await import("../services/fcm.js");
+
+    const result = await FCMService.sendGoalNotification({
+      matchId: body.matchId || 1,
+      teamId: body.teamId || 1957,
+      teamName: body.teamName || "Corinthians",
+      opponentName: body.opponentName || "Palmeiras",
+      minute: body.minute || 88,
+      scorerName: body.scorerName || "Memphis Depay",
+      homeScore: body.homeScore ?? 1,
+      awayScore: body.awayScore ?? 0,
+    });
+
+    return reply.send(result);
+  });
+
+  // Disparar mensagem personalizada para qualquer tópico arbitrário
+  app.post("/test-fcm-topic", async (request, reply) => {
+    const body = (request.body as {
+      topic?: string;
+      title?: string;
+      body?: string;
+      data?: Record<string, string>;
+    }) || {};
+
+    const { FCMService } = await import("../services/fcm.js");
+
+    const result = await FCMService.sendToTopic(
+      body.topic || "team_1957",
+      body.title || "⚽ Notificação BrasaFut",
+      body.body || "Atualização da partida em tempo real",
+      body.data || {}
+    );
+
+    return reply.send(result);
+  });
 };

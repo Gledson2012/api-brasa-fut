@@ -408,6 +408,30 @@ export class SofascoreSyncService {
               timestamp: new Date().toISOString(),
               data: { homeScore, awayScore, status },
             });
+
+            // Disparo automático de Push FCM se detectar novo gol
+            const prevHome = existing[0].homeScore ?? 0;
+            const prevAway = existing[0].awayScore ?? 0;
+            const curHome = homeScore ?? prevHome;
+            const curAway = awayScore ?? prevAway;
+
+            if (curHome > prevHome || curAway > prevAway) {
+              const scoringTeamId = curHome > prevHome ? homeTeamId : awayTeamId;
+              const scoringTeamName = curHome > prevHome ? (event.homeTeam?.name || "Mandante") : (event.awayTeam?.name || "Visitante");
+              const opponentName = curHome > prevHome ? (event.awayTeam?.name || "Visitante") : (event.homeTeam?.name || "Mandante");
+
+              import("./fcm.js").then(({ FCMService }) => {
+                FCMService.sendGoalNotification({
+                  matchId: savedMatchId,
+                  teamId: scoringTeamId,
+                  teamName: scoringTeamName,
+                  opponentName,
+                  minute: 90,
+                  homeScore: curHome,
+                  awayScore: curAway,
+                }).catch(() => {});
+              }).catch(() => {});
+            }
           }
         } else {
           const [inserted] = await db.insert(matches).values({
