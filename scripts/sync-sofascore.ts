@@ -59,6 +59,11 @@ const LEAGUES: LeagueConfig[] = [
   { code: "BUN", name: "Bundesliga", tournamentId: 35, seasonId: 97464, country: "Alemanha", type: "LEAGUE", hasStandings: true, seasonName: "2026/2027" },
   { code: "LIG-1", name: "Ligue 1", tournamentId: 34, seasonId: 96127, country: "França", type: "LEAGUE", hasStandings: true, seasonName: "2026/2027" },
   { code: "UCL", name: "UEFA Champions League", tournamentId: 7, seasonId: 96518, country: "Europa", type: "INTERNATIONAL", hasStandings: true, seasonName: "2026/2027" },
+  // Futebol Feminino
+  { code: "BRA-W1", name: "Brasileirão Feminino A1", tournamentId: 10257, seasonId: 89138, country: "Brasil", type: "LEAGUE", hasStandings: true, seasonName: "2026" },
+  { code: "NWSL", name: "National Women's Soccer League", tournamentId: 1690, seasonId: 88711, country: "Estados Unidos", type: "LEAGUE", hasStandings: true, seasonName: "2026" },
+  { code: "UWCL", name: "UEFA Women's Champions League", tournamentId: 696, seasonId: 96633, country: "Europa", type: "INTERNATIONAL", hasStandings: true, seasonName: "2026/2027" },
+  { code: "LIGA-F", name: "Liga F Moeve (Espanha Feminino)", tournamentId: 1127, seasonId: 97379, country: "Espanha", type: "LEAGUE", hasStandings: true, seasonName: "2026/2027" },
 ];
 
 async function syncLeague(league: LeagueConfig, liveEvents: any[]) {
