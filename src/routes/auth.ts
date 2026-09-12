@@ -324,4 +324,48 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       };
     }
   );
+
+  // Endpoint de migração de banco (adiciona password_hash e conta Enterprise)
+  app.get(
+    "/migrate-db",
+    {
+      schema: {
+        tags: ["Autenticação & Planos"],
+        summary: "Executar migração de colunas e dados no banco de dados",
+      },
+    },
+    async () => {
+      const { client } = await import("../db/index.js");
+
+      // 1. Criar coluna password_hash se não existir
+      await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
+
+      // 2. Garantir conta ENTERPRISE
+      const passHash = hashPassword("BrasaFut@Enterprise2026");
+      const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
+
+      await client`
+        INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
+        VALUES ('enterprise_admin', 'enterprise@brasafut.com.br', ${passHash}, ${key}, 'ENTERPRISE', 1000, true)
+        ON CONFLICT (email) DO UPDATE SET
+          user_name = EXCLUDED.user_name,
+          password_hash = EXCLUDED.password_hash,
+          key = EXCLUDED.key,
+          plan = 'ENTERPRISE',
+          rate_limit_per_minute = 1000,
+          is_active = true,
+          updated_at = NOW();
+      `;
+
+      return {
+        success: true,
+        message: "Migração do banco de dados e conta ENTERPRISE configurada com sucesso!",
+        login: "enterprise@brasafut.com.br",
+        userName: "enterprise_admin",
+        plan: "ENTERPRISE",
+        rateLimitPerMinute: 1000,
+        apiKey: key,
+      };
+    }
+  );
 };

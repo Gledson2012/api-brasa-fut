@@ -32,6 +32,7 @@ export async function authAndRateLimitMiddleware(
     url.startsWith("/api/v1/auth/register") ||
     url.startsWith("/api/v1/auth/login") ||
     url.startsWith("/api/v1/auth/plans") ||
+    url.startsWith("/api/v1/auth/migrate-db") ||
     url.startsWith("/api/v1/live/ws");
 
   if (isPublicRoute) {
