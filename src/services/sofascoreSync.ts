@@ -262,13 +262,15 @@ export class SofascoreSyncService {
           // 6. Sincronizar Artilharia, Líderes de Assistência e Estatísticas Oficiais
           await this.syncLeagueTopPlayers(league);
 
+          // 7. Sincronizar elencos completos de todos os times com fotos oficiais (apenas Série A para manter sync rápido)
+          if (league.code === "BRA-1") {
+            const teamList = rows.map((r) => r.team);
+            await this.syncLeagueSquads(teamList, league.code, league.tournamentId, league.seasonId);
+          }
         } catch (leagueErr: any) {
           console.warn(`[SofascoreSync] Erro ao sincronizar ${league.name}:`, leagueErr.message);
         }
       }
-
-      // Sincronizar elenco real e dados do Corinthians (incluindo Memphis Depay)
-      await this.syncCorinthiansSpecial();
 
       return {
         success: true,
@@ -628,17 +630,16 @@ export class SofascoreSyncService {
   }
 
   /**
-   * Sincroniza elenco e estatísticas oficiais do Corinthians (com foco no Memphis Depay)
+   * Sincroniza elencos completos e oficiais de todos os times da liga com fotos e dados biométricos
    */
-  public static async syncCorinthiansSpecial() {
+  public static async syncLeagueSquads(
+    teamsList: Array<{ id: number; name: string; shortName?: string; nameCode?: string }>,
+    leagueCode: string = "BRA-1",
+    tournamentId: number = 325,
+    seasonSofascoreId: number = 87678
+  ) {
     try {
-      const corinthiansSofaId = 1957;
-      const squadData = await this.fetchJson<{ players?: Array<{ player: any }> }>(
-        `https://api.sofascore.com/api/v1/team/${corinthiansSofaId}/players`
-      );
-      if (!squadData?.players) return;
-
-      const [comp] = await db.select().from(competitions).where(eq(competitions.code, "BRA-1"));
+      const [comp] = await db.select().from(competitions).where(eq(competitions.code, leagueCode));
       if (!comp) return;
 
       const [season] = await db
@@ -647,109 +648,117 @@ export class SofascoreSyncService {
         .where(and(eq(seasons.competitionId, comp.id), eq(seasons.name, "2026")));
       if (!season) return;
 
-      const corinthiansId = await this.findOrCreateTeam({
-        id: corinthiansSofaId,
-        name: "Corinthians",
-        shortName: "Corinthians",
-        nameCode: "COR",
-      });
+      console.log(`👥 [SofascoreSync] Sincronizando elencos completos com fotos para ${teamsList.length} clubes de ${leagueCode}...`);
 
-      for (const item of squadData.players) {
-        const p = item.player;
-        if (!p?.name) continue;
+      for (const t of teamsList) {
+        if (!t?.id) continue;
+        try {
+          const dbTeamId = await this.findOrCreateTeam(t, leagueCode);
+          const squadData = await this.fetchJson<{ players?: Array<{ player: any }> }>(
+            `https://api.sofascore.com/api/v1/team/${t.id}/players`
+          );
+          if (!squadData?.players || !Array.isArray(squadData.players)) continue;
 
-        const playerId = await this.findOrCreatePlayer(p);
-        const jerseyNumber = p.jerseyNumber ? parseInt(p.jerseyNumber, 10) : (p.shirtNumber || null);
+          for (const item of squadData.players) {
+            const p = item.player;
+            if (!p?.name) continue;
 
-        // Inserir ou atualizar no elenco
-        await db.insert(teamRosters).values({
-          teamId: corinthiansId,
-          playerId,
-          seasonId: season.id,
-          jerseyNumber,
-          position: this.mapPosition(p.position),
-        }).onConflictDoNothing();
+            const playerId = await this.findOrCreatePlayer(p);
+            const jerseyNumber = p.jerseyNumber ? parseInt(p.jerseyNumber, 10) : (p.shirtNumber || null);
 
-        // Para Memphis Depay e destaques, buscar estatísticas oficiais da temporada
-        const isMemphis = p.name.toLowerCase().includes("depay") || p.name.toLowerCase().includes("memphis");
-        if (isMemphis || p.jerseyNumber === "9" || p.jerseyNumber === "10") {
-          try {
-            const statsUrl = `https://api.sofascore.com/api/v1/player/${p.id}/unique-tournament/325/season/87678/statistics/overall`;
-            const statsData = await this.fetchJson<{ statistics?: Record<string, any> }>(statsUrl);
-            const st = statsData?.statistics;
-            if (st) {
-              const goals = Number(st.goals || 0);
-              const assists = Number(st.assists || 0);
-              const appearances = Number(st.appearances || 0);
-              const matchesStarted = Number(st.matchesStarted || 0);
-              const minutesPlayed = Number(st.minutesPlayed || 0);
-              const rating = st.rating ? String(Number(st.rating).toFixed(2)) : "0.0";
-              const xG = st.expectedGoals ? String(Number(st.expectedGoals).toFixed(2)) : "0.0";
-              const xA = st.expectedAssists ? String(Number(st.expectedAssists).toFixed(2)) : "0.0";
-              const shotsTotal = Number(st.totalShots || 0);
-              const shotsOnTarget = Number(st.shotsOnTarget || 0);
-              const keyPasses = Number(st.keyPasses || 0);
-              const yellowCards = Number(st.yellowCards || 0);
-              const redCards = Number(st.redCards || 0);
+            // Registrar no elenco oficial do time
+            await db.insert(teamRosters).values({
+              teamId: dbTeamId,
+              playerId,
+              seasonId: season.id,
+              jerseyNumber,
+              position: this.mapPosition(p.position),
+            }).onConflictDoNothing();
 
-              const existingStat = await db
-                .select()
-                .from(playerSeasonStatistics)
-                .where(
-                  and(
-                    eq(playerSeasonStatistics.playerId, playerId),
-                    eq(playerSeasonStatistics.seasonId, season.id)
-                  )
-                );
+            // Para jogadores de destaque (como Memphis Depay), sincronizar scouts específicos
+            const isMemphis = p.name.toLowerCase().includes("depay") || p.name.toLowerCase().includes("memphis");
+            if (isMemphis) {
+              try {
+                const statsUrl = `https://api.sofascore.com/api/v1/player/${p.id}/unique-tournament/${tournamentId}/season/${seasonSofascoreId}/statistics/overall`;
+                const statsData = await this.fetchJson<{ statistics?: Record<string, any> }>(statsUrl);
+                const st = statsData?.statistics;
+                if (st) {
+                  const goals = Number(st.goals || 0);
+                  const assists = Number(st.assists || 0);
+                  const appearances = Number(st.appearances || 0);
+                  const matchesStarted = Number(st.matchesStarted || 0);
+                  const minutesPlayed = Number(st.minutesPlayed || 0);
+                  const rating = st.rating ? String(Number(st.rating).toFixed(2)) : "0.0";
+                  const xG = st.expectedGoals ? String(Number(st.expectedGoals).toFixed(2)) : "0.0";
+                  const xA = st.expectedAssists ? String(Number(st.expectedAssists).toFixed(2)) : "0.0";
+                  const shotsTotal = Number(st.totalShots || 0);
+                  const shotsOnTarget = Number(st.shotsOnTarget || 0);
+                  const keyPasses = Number(st.keyPasses || 0);
+                  const yellowCards = Number(st.yellowCards || 0);
+                  const redCards = Number(st.redCards || 0);
 
-              if (existingStat.length > 0) {
-                await db
-                  .update(playerSeasonStatistics)
-                  .set({
-                    appearances,
-                    matchesStarted,
-                    minutesPlayed,
-                    goals,
-                    assists,
-                    rating,
-                    expectedGoals: xG,
-                    expectedAssists: xA,
-                    shotsTotal,
-                    shotsOnTarget,
-                    keyPasses,
-                    yellowCards,
-                    redCards,
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(playerSeasonStatistics.id, existingStat[0].id));
-              } else {
-                await db.insert(playerSeasonStatistics).values({
-                  playerId,
-                  seasonId: season.id,
-                  teamId: corinthiansId,
-                  appearances,
-                  matchesStarted,
-                  minutesPlayed,
-                  goals,
-                  assists,
-                  rating,
-                  expectedGoals: xG,
-                  expectedAssists: xA,
-                  shotsTotal,
-                  shotsOnTarget,
-                  keyPasses,
-                  yellowCards,
-                  redCards,
-                });
+                  const existingStat = await db
+                    .select()
+                    .from(playerSeasonStatistics)
+                    .where(
+                      and(
+                        eq(playerSeasonStatistics.playerId, playerId),
+                        eq(playerSeasonStatistics.seasonId, season.id)
+                      )
+                    );
+
+                  if (existingStat.length > 0) {
+                    await db
+                      .update(playerSeasonStatistics)
+                      .set({
+                        appearances,
+                        matchesStarted,
+                        minutesPlayed,
+                        goals,
+                        assists,
+                        rating,
+                        expectedGoals: xG,
+                        expectedAssists: xA,
+                        shotsTotal,
+                        shotsOnTarget,
+                        keyPasses,
+                        yellowCards,
+                        redCards,
+                        updatedAt: new Date(),
+                      })
+                      .where(eq(playerSeasonStatistics.id, existingStat[0].id));
+                  } else {
+                    await db.insert(playerSeasonStatistics).values({
+                      playerId,
+                      seasonId: season.id,
+                      teamId: dbTeamId,
+                      appearances,
+                      matchesStarted,
+                      minutesPlayed,
+                      goals,
+                      assists,
+                      rating,
+                      expectedGoals: xG,
+                      expectedAssists: xA,
+                      shotsTotal,
+                      shotsOnTarget,
+                      keyPasses,
+                      yellowCards,
+                      redCards,
+                    });
+                  }
+                }
+              } catch {
+                // Ignora falha pontual
               }
             }
-          } catch {
-            // Ignora falha de busca de scout individual
           }
+        } catch (teamErr: any) {
+          console.warn(`[SofascoreSync] Erro ao sincronizar elenco de ${t.name}:`, teamErr.message);
         }
       }
     } catch (err: any) {
-      console.warn("[SofascoreSync] Erro ao sincronizar elenco do Corinthians:", err.message);
+      console.warn(`[SofascoreSync] Erro geral ao sincronizar elencos de ${leagueCode}:`, err.message);
     }
   }
 
