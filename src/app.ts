@@ -27,6 +27,8 @@ import { searchRoutes } from "./routes/search.js";
 import { transfersRoutes } from "./routes/transfers.js";
 import { refereesRoutes } from "./routes/referees.js";
 import { exportRoutes } from "./routes/export.js";
+import { injuryRoutes } from "./routes/injuries.js";
+import { oddsRoutes } from "./routes/odds.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -138,7 +140,16 @@ export function buildApp() {
         playerFantasy: "/api/v1/players/:id/fantasy",
         teamAbsences: "/api/v1/teams/:id/absences",
         teamH2H: "/api/v1/teams/:team1Id/vs/:team2Id",
+        teamCompare: "/api/v1/teams/compare?team1=1&team2=2",
+        teamTrophies: "/api/v1/teams/:id/trophies",
+        competitionChampions: "/api/v1/competitions/:id/champions",
         competitionTotw: "/api/v1/competitions/:id/team-of-the-week?round=26",
+        matchHeatmap: "/api/v1/matches/:id/heatmap",
+        playerHeatmap: "/api/v1/players/:id/heatmap",
+        oddsMatch: "/api/v1/odds/matches/:matchId",
+        oddsValueBets: "/api/v1/odds/value-bets",
+        injuriesReport: "/api/v1/injuries/report",
+        injuriesTeam: "/api/v1/injuries/teams/:teamId",
         standingsSimulate: "POST /api/v1/standings/simulate",
         referees: "/api/v1/referees",
         exportStandings: "/api/v1/export/standings?seasonId=1",
@@ -168,6 +179,8 @@ export function buildApp() {
   app.register(transfersRoutes, { prefix: "/api/v1/transfers" });
   app.register(refereesRoutes, { prefix: "/api/v1/referees" });
   app.register(exportRoutes, { prefix: "/api/v1/export" });
+  app.register(injuryRoutes, { prefix: "/api/v1/injuries" });
+  app.register(oddsRoutes, { prefix: "/api/v1/odds" });
 
   return app;
 }

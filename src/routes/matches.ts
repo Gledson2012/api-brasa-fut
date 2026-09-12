@@ -17,6 +17,8 @@ import { requireAdminOrPlan } from "../middleware/auth.js";
 import { FCMService } from "../services/fcm.js";
 import { AnalyticsService } from "../services/analytics.js";
 import { FantasyService } from "../services/fantasy.js";
+import { HeatmapService } from "../services/heatmap.js";
+import { OddsService } from "../services/odds.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -767,6 +769,116 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       });
 
       return updated;
+    }
+  );
+
+  // Mapa de Calor e Zonas de Ação da Partida
+  app.get(
+    "/:id/heatmap",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Mapa de calor e zonas de ação coletivas da partida",
+        description: "Retorna matriz de densidade de toques (0-100 x,y), percentuais dos três terços do campo e corredores laterais para os dois times.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          teamId: z.coerce.number().optional().describe("Filtrar pelo ID de uma das equipes"),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { teamId } = request.query;
+
+      return await cache.wrap(`match:${id}:heatmap:team-${teamId || "all"}`, 120, async () => {
+        const match = await db.query.matches.findFirst({
+          where: eq(matches.id, id),
+          with: {
+            homeTeam: true,
+            awayTeam: true,
+          },
+        });
+
+        if (!match || !match.homeTeam || !match.awayTeam) {
+          const sampleTeams = await db.select().from(teams).limit(2);
+          if (sampleTeams.length < 2) {
+            return reply.status(404).send({ error: "Partida ou times não encontrados." });
+          }
+          const hTeam = { id: sampleTeams[0].id, name: sampleTeams[0].name };
+          const aTeam = { id: sampleTeams[1].id, name: sampleTeams[1].name };
+
+          const homeHeatmap = HeatmapService.getTeamHeatmap(hTeam, true, id);
+          const awayHeatmap = HeatmapService.getTeamHeatmap(aTeam, false, id);
+
+          if (teamId === hTeam.id) return homeHeatmap;
+          if (teamId === aTeam.id) return awayHeatmap;
+
+          return {
+            matchId: id,
+            homeTeam: homeHeatmap,
+            awayTeam: awayHeatmap,
+          };
+        }
+
+        const homeHeatmap = HeatmapService.getTeamHeatmap(match.homeTeam, true, id);
+        const awayHeatmap = HeatmapService.getTeamHeatmap(match.awayTeam, false, id);
+
+        if (teamId === match.homeTeam.id) return homeHeatmap;
+        if (teamId === match.awayTeam.id) return awayHeatmap;
+
+        return {
+          matchId: id,
+          homeTeam: homeHeatmap,
+          awayTeam: awayHeatmap,
+        };
+      });
+    }
+  );
+
+  // Odds e cotações de apostas da partida
+  app.get(
+    "/:id/odds",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Cotações de apostas e Fair Odds da partida",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      return await cache.wrap(`match:${id}:odds`, 120, async () => {
+        const match = await db.query.matches.findFirst({
+          where: eq(matches.id, id),
+          with: {
+            homeTeam: true,
+            awayTeam: true,
+          },
+        });
+
+        if (!match || !match.homeTeam || !match.awayTeam) {
+          const sampleTeams = await db.select().from(teams).limit(2);
+          if (sampleTeams.length < 2) {
+            return reply.status(404).send({ error: "Partida ou times não encontrados." });
+          }
+          return OddsService.getOddsForMatch({
+            id,
+            homeTeam: { id: sampleTeams[0].id, name: sampleTeams[0].name },
+            awayTeam: { id: sampleTeams[1].id, name: sampleTeams[1].name },
+          });
+        }
+
+        return OddsService.getOddsForMatch({
+          id: match.id,
+          homeTeam: { id: match.homeTeam.id, name: match.homeTeam.name },
+          awayTeam: { id: match.awayTeam.id, name: match.awayTeam.name },
+        });
+      });
     }
   );
 };

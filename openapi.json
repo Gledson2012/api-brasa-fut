@@ -1093,6 +1093,30 @@
         }
       }
     },
+    "/api/v1/competitions/{id}/champions": {
+      "get": {
+        "summary": "Galeria histórica de campeões e edições da competição",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Retorna o histórico de todas as edições da competição (campeão, vice, artilheiro da temporada) e o ranking dos maiores campeões de todos os tempos.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/teams/": {
       "get": {
         "summary": "Listar todos os clubes",
@@ -1136,6 +1160,50 @@
             "in": "query",
             "name": "page",
             "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/compare": {
+      "get": {
+        "summary": "Comparador tático de clubes na temporada",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Compara lado a lado dois clubes em métricas da temporada: pontos, aproveitamento, ataque, defesa, posse de bola, disciplina e veredito de vantagem.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "team1",
+            "required": true,
+            "description": "ID do primeiro clube"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "team2",
+            "required": true,
+            "description": "ID do segundo clube"
+          },
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false,
+            "description": "ID da temporada"
           }
         ],
         "responses": {
@@ -1280,6 +1348,53 @@
             },
             "in": "path",
             "name": "team2Id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/trophies": {
+      "get": {
+        "summary": "Sala de troféus e galeria de títulos oficiais do clube",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Retorna todos os títulos internacionais, nacionais e estaduais conquistados pelo clube, anos das conquistas e total histórico.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/injuries": {
+      "get": {
+        "summary": "Departamento Médico e lista de atletas lesionados do clube",
+        "tags": [
+          "Clubes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
             "required": true
           }
         ],
@@ -1561,6 +1676,39 @@
         ],
         "description": "Retorna as pontuações do atleta rodada a rodada, média na temporada, maior pontuação (mito da rodada) e menor pontuação.",
         "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/players/{id}/heatmap": {
+      "get": {
+        "summary": "Mapa de calor e zonas de atuação em campo do atleta",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Retorna as coordenadas 2D dos toques do atleta na partida, proporção de atuação por terço do campo e alas.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "matchId",
+            "required": false
+          },
           {
             "schema": {
               "type": "number"
@@ -2020,6 +2168,62 @@
             }
           }
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/heatmap": {
+      "get": {
+        "summary": "Mapa de calor e zonas de ação coletivas da partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna matriz de densidade de toques (0-100 x,y), percentuais dos três terços do campo e corredores laterais para os dois times.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Filtrar pelo ID de uma das equipes"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/odds": {
+      "get": {
+        "summary": "Cotações de apostas e Fair Odds da partida",
+        "tags": [
+          "Partidas"
+        ],
         "parameters": [
           {
             "schema": {
@@ -2773,6 +2977,105 @@
             "in": "query",
             "name": "seasonId",
             "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/injuries/report": {
+      "get": {
+        "summary": "Relatório geral do Departamento Médico e lesões na temporada",
+        "tags": [
+          "Departamento Médico & Lesões"
+        ],
+        "description": "Estatísticas agregadas de lesões, tempo médio de recuperação e ranking dos clubes mais castigados por desfalques médicos.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/injuries/teams/{teamId}": {
+      "get": {
+        "summary": "Boletim do Departamento Médico de um clube",
+        "tags": [
+          "Departamento Médico & Lesões"
+        ],
+        "description": "Lista de todos os jogadores atualmente no DM, diagnóstico clínico, gravidade, tempo de afastamento e previsão de volta.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "teamId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/odds/matches/{matchId}": {
+      "get": {
+        "summary": "Obter Odds completas e Fair Odds de uma partida",
+        "tags": [
+          "Apostas & Odds (Mercados Esportivos)"
+        ],
+        "description": "Retorna cotações de 1X2, Over/Under de gols, Ambas Marcam e Dupla Hipótese comparadas entre Bet365, Betano e Betfair, acompanhadas das Fair Odds matemáticas.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "matchId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/odds/value-bets": {
+      "get": {
+        "summary": "Radar de Value Bets (Apostas com Valor Esperado Positivo - EV+)",
+        "tags": [
+          "Apostas & Odds (Mercados Esportivos)"
+        ],
+        "description": "Compara as probabilidades matemáticas do modelo de IA contra as odds das casas de apostas, identificando distorções de mercado e oportunidades com EV+ lucrativo.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 3,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "minEv",
+            "required": false,
+            "description": "Valor esperado mínimo em porcentagem (ex: 3.0)"
           }
         ],
         "responses": {

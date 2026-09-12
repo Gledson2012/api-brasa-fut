@@ -792,6 +792,140 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(plyRes.headers["content-type"]?.includes("text/csv"));
     assert.ok(plyRes.payload.includes("ID,Nome,Clube,Posicao"));
   });
+
+  test("36. Heatmaps e Zonas de Ação (/matches/:id/heatmap e /players/:id/heatmap)", async () => {
+    // Heatmap da partida
+    const matchHeatRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/heatmap",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(matchHeatRes.statusCode, 200);
+    const matchHeatBody = JSON.parse(matchHeatRes.payload);
+    assert.ok(matchHeatBody.homeTeam);
+    assert.ok(matchHeatBody.awayTeam);
+    assert.ok(Array.isArray(matchHeatBody.homeTeam.points));
+    assert.ok(matchHeatBody.homeTeam.actionZones.thirds);
+    assert.ok(typeof matchHeatBody.homeTeam.actionZones.thirds.defensiveThird === "number");
+
+    // Heatmap do jogador
+    const playerHeatRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players/1/heatmap?matchId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(playerHeatRes.statusCode, 200);
+    const playerHeatBody = JSON.parse(playerHeatRes.payload);
+    assert.ok(playerHeatBody.playerId > 0);
+    assert.ok(Array.isArray(playerHeatBody.points));
+    assert.ok(playerHeatBody.actionZones.flanks);
+  });
+
+  test("37. Comparador Tático de Clubes na Temporada (/teams/compare)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams/compare?team1=1&team2=2&seasonId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.team1);
+    assert.ok(body.team2);
+    assert.ok(body.tacticalVerdict);
+    assert.ok(typeof body.team1.stats.points === "number");
+    assert.ok(typeof body.team2.stats.winPercentage === "number");
+    assert.ok(body.tacticalVerdict.offensiveAdvantage);
+  });
+
+  test("38. Central de Odds e Fair Odds de Partidas (/odds/matches/:id)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/odds/matches/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.fairOdds);
+    assert.ok(body.consensusOdds);
+    assert.ok(Array.isArray(body.bookmakers));
+    assert.ok(body.bookmakers.length >= 3);
+    assert.ok(typeof body.fairOdds.market1X2.home === "number");
+    assert.ok(typeof body.bookmakers[0].market1X2.draw === "number");
+  });
+
+  test("39. Radar de Value Bets (EV+) (/odds/value-bets)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/odds/value-bets?minEv=2.0",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(typeof body.totalFound === "number");
+    assert.ok(Array.isArray(body.opportunities));
+    if (body.opportunities.length > 0) {
+      const opp = body.opportunities[0];
+      assert.ok(opp.offeredOdd > opp.fairOdd || opp.expectedValuePct >= 2.0);
+      assert.ok(opp.bookmaker);
+      assert.ok(opp.recommendation);
+    }
+  });
+
+  test("40. Central de DM e Observatório de Lesões (/injuries/report e /injuries/teams/:id)", async () => {
+    // Relatório geral
+    const repRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/injuries/report?seasonId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(repRes.statusCode, 200);
+    const repBody = JSON.parse(repRes.payload);
+    assert.ok(repBody.overview);
+    assert.ok(typeof repBody.overview.totalPlayersInjured === "number");
+    assert.ok(Array.isArray(repBody.clubsRanking));
+
+    // Boletim do clube
+    const teamInjRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/injuries/teams/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(teamInjRes.statusCode, 200);
+    const teamInjBody = JSON.parse(teamInjRes.payload);
+    assert.ok(teamInjBody.team.id > 0);
+    assert.ok(Array.isArray(teamInjBody.medicalReport));
+    if (teamInjBody.medicalReport.length > 0) {
+      assert.ok(teamInjBody.medicalReport[0].injuryDiagnosis);
+      assert.ok(teamInjBody.medicalReport[0].returnEstimate);
+    }
+  });
+
+  test("41. Sala de Troféus e Histórico de Campeões (/teams/:id/trophies e /competitions/:id/champions)", async () => {
+    // Troféus do clube
+    const trofRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams/1/trophies",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(trofRes.statusCode, 200);
+    const trofBody = JSON.parse(trofRes.payload);
+    assert.ok(trofBody.team.id > 0);
+    assert.ok(trofBody.totalTrophiesCount > 0);
+    assert.ok(Array.isArray(trofBody.trophies.national));
+
+    // Campeões da competição
+    const champRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/competitions/1/champions",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(champRes.statusCode, 200);
+    const champBody = JSON.parse(champRes.payload);
+    assert.ok(champBody.competition.id > 0);
+    assert.ok(Array.isArray(champBody.allTimeTitlesRanking));
+    assert.ok(Array.isArray(champBody.editions));
+    assert.ok(champBody.editions[0].champion);
+  });
 });
 
 

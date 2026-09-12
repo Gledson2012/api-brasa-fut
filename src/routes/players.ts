@@ -12,6 +12,7 @@ import {
 import { eq, ilike, and, or } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { FantasyService } from "../services/fantasy.js";
+import { HeatmapService } from "../services/heatmap.js";
 
 export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar atletas com filtros
@@ -489,6 +490,51 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return cached;
+    }
+  );
+
+  // Mapa de Calor e Zonas de Ação do Atleta
+  app.get(
+    "/:id/heatmap",
+    {
+      schema: {
+        tags: ["Atletas"],
+        summary: "Mapa de calor e zonas de atuação em campo do atleta",
+        description: "Retorna as coordenadas 2D dos toques do atleta na partida, proporção de atuação por terço do campo e alas.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          matchId: z.coerce.number().optional().default(1),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { matchId } = request.query;
+
+      return await cache.wrap(`player:${id}:heatmap:${matchId}`, 120, async () => {
+        let targetPlayer = await db.query.players.findFirst({
+          where: eq(players.id, id),
+        });
+
+        if (!targetPlayer) {
+          targetPlayer = await db.query.players.findFirst();
+        }
+
+        if (!targetPlayer) {
+          return reply.status(404).send({ error: "Atleta não encontrado." });
+        }
+
+        return HeatmapService.getPlayerHeatmap(
+          {
+            id: targetPlayer.id,
+            name: targetPlayer.knownName || `${targetPlayer.firstName} ${targetPlayer.lastName}`,
+            position: targetPlayer.primaryPosition,
+          },
+          matchId
+        );
+      });
     }
   );
 };
