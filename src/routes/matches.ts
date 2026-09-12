@@ -15,6 +15,8 @@ import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
 import { requireAdminOrPlan } from "../middleware/auth.js";
 import { FCMService } from "../services/fcm.js";
+import { AnalyticsService } from "../services/analytics.js";
+import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -442,6 +444,119 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       };
     }
   );
+
+  // Inteligência Preditiva e Probabilidades Pré-Jogo
+  app.get(
+    "/:id/predictions",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Inteligência Preditiva & Probabilidades Pré-Jogo (Odds & Probabilidades)",
+        description:
+          "Calcula as probabilidades estatísticas de vitória (mandante, empate, visitante), projeção de média de gols (Over/Under), ambos marcam (BTTS), placares prováveis e insights analíticos baseados em forma recente e mando.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`match:${id}:predictions`, 120, async () => {
+        return await AnalyticsService.getMatchPredictions(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Partida não encontrada para cálculo preditivo." });
+      }
+
+      return cached;
+    }
+  );
+
+  // Gráfico de Pressão & Momentum do Jogo (Attack Momentum)
+  app.get(
+    "/:id/momentum",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Gráfico de Pressão & Momentum da Partida (Minuto a Minuto)",
+        description:
+          "Retorna a linha do tempo minuto a minuto com o índice de pressão e dominância de ataque das equipes (-100 a +100), incluindo marcadores de eventos capitais do jogo.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`match:${id}:momentum`, 30, async () => {
+        return await AnalyticsService.getMatchMomentum(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Partida não encontrada para cálculo de momentum." });
+      }
+
+      return cached;
+    }
+  );
+
+  // Mapa de Finalizações no Campo (Shot Map & xG dos Chutes)
+  app.get(
+    "/:id/shot-map",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Mapa de Finalizações no Campo (Shot Map & xG dos Chutes)",
+        description:
+          "Retorna as coordenadas espaciais (x, y) no campo de jogo de todas as finalizações, com indicação do resultado (gol, defesa, para fora, travado), probabilidade xG e parte do corpo.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`match:${id}:shot-map`, 60, async () => {
+        return await AnalyticsService.getMatchShotMap(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Partida não encontrada para mapa de finalizações." });
+      }
+
+      return cached;
+    }
+  );
+
+  // Departamento Médico e Desfalques da Partida (Ambos os clubes)
+  app.get(
+    "/:id/absences",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Desfalques e Departamento Médico dos clubes para a partida",
+        description:
+          "Lista atletas suspensos, lesionados ou em dúvida para a partida de ambos os clubes (mandante e visitante).",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`match:${id}:absences`, 180, async () => {
+        return await AnalyticsService.getMatchAbsences(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Partida não encontrada." });
+      }
+
+      return cached;
+    }
+  );
+
 
   // Endpoint de inserção de evento (Admin / Real-time trigger)
   app.post(

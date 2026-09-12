@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { teams, teamRosters, players, venues, seasons, matches, competitions } from "../db/schema.js";
 import { eq, ilike, and, or, desc, asc } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { AnalyticsService } from "../services/analytics.js";
 
 export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar times com filtros
@@ -318,4 +319,33 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Departamento Médico e Desfalques do Clube
+  app.get(
+    "/:id/absences",
+    {
+      schema: {
+        tags: ["Clubes"],
+        summary: "Desfalques e Departamento Médico do Clube (Lesões e Suspensões)",
+        description:
+          "Retorna a lista atualizada de atletas desfalques do clube por motivo médico (lesões, cirurgias, transição física) ou disciplinares (suspensões automáticas ou julgamentos).",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cached = await cache.wrap(`team:${id}:absences`, 180, async () => {
+        return await AnalyticsService.getTeamAbsences(id);
+      });
+
+      if (!cached) {
+        return reply.status(404).send({ error: "Clube não encontrado." });
+      }
+
+      return cached;
+    }
+  );
 };
+

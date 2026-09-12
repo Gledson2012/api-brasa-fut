@@ -126,6 +126,12 @@ export function buildApp() {
         newsLeagues: "/api/v1/news/leagues",
         search: "/api/v1/search?q=Flamengo",
         transfers: "/api/v1/transfers",
+        matchPredictions: "/api/v1/matches/:id/predictions",
+        matchMomentum: "/api/v1/matches/:id/momentum",
+        matchShotMap: "/api/v1/matches/:id/shot-map",
+        matchAbsences: "/api/v1/matches/:id/absences",
+        teamAbsences: "/api/v1/teams/:id/absences",
+        competitionTotw: "/api/v1/competitions/:id/team-of-the-week?round=26",
       },
     };
   });

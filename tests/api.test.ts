@@ -490,7 +490,161 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(transfer.type);
     assert.ok(transfer.transferDate);
   });
+
+  test("25. Inteligência Preditiva e Probabilidades Pré-Jogo (/api/v1/matches/:id/predictions)", async () => {
+    // Buscar primeira partida do banco
+    const matchesRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const matchesList = JSON.parse(matchesRes.payload);
+    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${match.id}/predictions`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, match.id);
+    assert.ok(body.homeTeam);
+    assert.ok(body.awayTeam);
+    assert.ok(body.probabilities);
+    assert.ok(typeof body.probabilities.homeWinPct === "number");
+    assert.ok(typeof body.probabilities.drawPct === "number");
+    assert.ok(typeof body.probabilities.awayWinPct === "number");
+    assert.equal(
+      body.probabilities.homeWinPct + body.probabilities.drawPct + body.probabilities.awayWinPct,
+      100
+    );
+    assert.ok(body.goalsExpected);
+    assert.ok(body.bothTeamsToScore);
+    assert.ok(Array.isArray(body.mostLikelyScores));
+    assert.ok(Array.isArray(body.insights));
+  });
+
+  test("26. Gráfico de Pressão e Attack Momentum (/api/v1/matches/:id/momentum)", async () => {
+    const matchesRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const matchesList = JSON.parse(matchesRes.payload);
+    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${match.id}/momentum`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, match.id);
+    assert.ok(body.summary);
+    assert.ok(typeof body.summary.homeDominancePct === "number");
+    assert.ok(Array.isArray(body.timeline));
+    assert.ok(body.timeline.length >= 80);
+    const point = body.timeline[10];
+    assert.ok(point.minute);
+    assert.ok(typeof point.value === "number");
+    assert.ok(["home", "away", "neutral"].includes(point.dominantTeam));
+  });
+
+  test("27. Mapa de Finalizações no Campo / Shot Map (/api/v1/matches/:id/shot-map)", async () => {
+    const matchesRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const matchesList = JSON.parse(matchesRes.payload);
+    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${match.id}/shot-map`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, match.id);
+    assert.ok(body.summary);
+    assert.ok(body.summary.home);
+    assert.ok(body.summary.away);
+    assert.ok(typeof body.summary.home.expectedGoals === "number");
+    assert.ok(Array.isArray(body.shots));
+    assert.ok(body.shots.length > 0);
+    const shot = body.shots[0];
+    assert.ok(shot.coordinates);
+    assert.ok(typeof shot.coordinates.x === "number");
+    assert.ok(typeof shot.coordinates.y === "number");
+    assert.ok(["GOAL", "SAVED", "MISSED", "BLOCKED", "POST"].includes(shot.outcome));
+    assert.ok(typeof shot.expectedGoals === "number");
+  });
+
+  test("28. Departamento Médico e Desfalques (/api/v1/teams/:id/absences e /api/v1/matches/:id/absences)", async () => {
+    // Buscar primeiro time
+    const teamsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const teamsList = JSON.parse(teamsRes.payload);
+    const firstTeam = Array.isArray(teamsList) ? teamsList[0] : teamsList.data[0];
+
+    const teamAbsRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/teams/${firstTeam.id}/absences`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(teamAbsRes.statusCode, 200);
+    const teamAbsBody = JSON.parse(teamAbsRes.payload);
+    assert.ok(teamAbsBody.team);
+    assert.ok(Array.isArray(teamAbsBody.absences));
+
+    // Partida absences
+    const matchesRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const matchesList = JSON.parse(matchesRes.payload);
+    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
+
+    const matchAbsRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${match.id}/absences`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(matchAbsRes.statusCode, 200);
+    const matchAbsBody = JSON.parse(matchAbsRes.payload);
+    assert.equal(matchAbsBody.matchId, match.id);
+    assert.ok(matchAbsBody.homeTeam);
+    assert.ok(matchAbsBody.awayTeam);
+    assert.ok(typeof matchAbsBody.totalAbsences === "number");
+  });
+
+  test("29. Seleção da Rodada (Team of the Week / Best XI) (/api/v1/competitions/:id/team-of-the-week)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/competitions/1/team-of-the-week?round=26",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.competitionId, 1);
+    assert.equal(body.formation, "4-3-3");
+    assert.ok(body.playerOfTheRound);
+    assert.ok(Array.isArray(body.eleven));
+    assert.equal(body.eleven.length, 11);
+    const player1 = body.eleven[0];
+    assert.ok(player1.player.name);
+    assert.ok(player1.tacticalRole);
+    assert.ok(player1.roundRating);
+  });
 });
+
 
 
 

@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { competitions, seasons, playerSeasonStatistics, players, teams } from "../db/schema.js";
 import { eq, and, desc } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { AnalyticsService } from "../services/analytics.js";
 
 export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar todas as competições
@@ -456,4 +457,55 @@ export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Seleção da Rodada (Team of the Week / Best XI) via Query ou URL
+  app.get(
+    "/:id/team-of-the-week",
+    {
+      schema: {
+        tags: ["Competições"],
+        summary: "Seleção da Rodada da Competição (Team of the Week / Best XI)",
+        description:
+          "Retorna os 11 melhores atletas escalados no esquema tático 4-3-3 e o Craque da Rodada, eleitos com base nas notas médias e scouts de desempenho.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          round: z.string().default("26").describe("Número ou identificador da rodada (ex: 26 ou Rodada 26)"),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { round } = request.query;
+
+      const cached = await cache.wrap(`competition:${id}:totw:${round}`, 300, async () => {
+        return await AnalyticsService.getTeamOfTheWeek(id, round);
+      });
+
+      return cached;
+    }
+  );
+
+  app.get(
+    "/:id/rounds/:round/team-of-the-week",
+    {
+      schema: {
+        tags: ["Competições"],
+        summary: "Seleção da Rodada da Competição por parâmetro de rota (Team of the Week)",
+        params: z.object({
+          id: z.coerce.number(),
+          round: z.string(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id, round } = request.params;
+
+      return await cache.wrap(`competition:${id}:totw:${round}`, 300, async () => {
+        return await AnalyticsService.getTeamOfTheWeek(id, round);
+      });
+    }
+  );
 };
+

@@ -499,7 +499,34 @@ export const transfers = pgTable(
 );
 
 // ----------------------------------------------------------------------------
-// 14. RELATIONS (DRIZZLE ORM)
+// 14. TEAM ABSENCES (DEPARTAMENTO MÉDICO & SUSPENSÕES)
+// ----------------------------------------------------------------------------
+export const teamAbsences = pgTable(
+  "team_absences",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    teamId: bigint("team_id", { mode: "number" })
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerId: bigint("player_id", { mode: "number" }).references(() => players.id, {
+      onDelete: "set null",
+    }),
+    playerName: varchar("player_name", { length: 150 }).notNull(),
+    position: varchar("position", { length: 50 }),
+    type: varchar("type", { length: 50 }).notNull(), // 'INJURY', 'SUSPENSION', 'DOUBT', 'INTERNATIONAL'
+    reason: varchar("reason", { length: 255 }).notNull(),
+    expectedReturn: varchar("expected_return", { length: 100 }),
+    status: varchar("status", { length: 50 }).default("OUT").notNull(), // 'OUT', 'DOUBT'
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_team_absences_team_id").on(table.teamId),
+    index("idx_team_absences_player_id").on(table.playerId),
+  ]
+);
+
+// ----------------------------------------------------------------------------
+// 15. RELATIONS (DRIZZLE ORM)
 // ----------------------------------------------------------------------------
 export const venuesRelations = relations(venues, ({ many }) => ({
   teams: many(teams),
@@ -641,5 +668,17 @@ export const transfersRelations = relations(transfers, ({ one }) => ({
     relationName: "toTeam",
   }),
 }));
+
+export const teamAbsencesRelations = relations(teamAbsences, ({ one }) => ({
+  team: one(teams, {
+    fields: [teamAbsences.teamId],
+    references: [teams.id],
+  }),
+  player: one(players, {
+    fields: [teamAbsences.playerId],
+    references: [players.id],
+  }),
+}));
+
 
 

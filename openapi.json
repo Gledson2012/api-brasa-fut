@@ -1028,6 +1028,71 @@
         }
       }
     },
+    "/api/v1/competitions/{id}/team-of-the-week": {
+      "get": {
+        "summary": "Seleção da Rodada da Competição (Team of the Week / Best XI)",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Retorna os 11 melhores atletas escalados no esquema tático 4-3-3 e o Craque da Rodada, eleitos com base nas notas médias e scouts de desempenho.",
+        "parameters": [
+          {
+            "schema": {
+              "default": "26",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "round",
+            "required": false,
+            "description": "Número ou identificador da rodada (ex: 26 ou Rodada 26)"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/competitions/{id}/rounds/{round}/team-of-the-week": {
+      "get": {
+        "summary": "Seleção da Rodada da Competição por parâmetro de rota (Team of the Week)",
+        "tags": [
+          "Competições"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "round",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/teams/": {
       "get": {
         "summary": "Listar todos os clubes",
@@ -1153,6 +1218,30 @@
             "name": "limit",
             "required": false
           },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/absences": {
+      "get": {
+        "summary": "Desfalques e Departamento Médico do Clube (Lesões e Suspensões)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Retorna a lista atualizada de atletas desfalques do clube por motivo médico (lesões, cirurgias, transição física) ou disciplinares (suspensões automáticas ou julgamentos).",
+        "parameters": [
           {
             "schema": {
               "type": "number"
@@ -1690,6 +1779,102 @@
         "tags": [
           "Partidas"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/predictions": {
+      "get": {
+        "summary": "Inteligência Preditiva & Probabilidades Pré-Jogo (Odds & Probabilidades)",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Calcula as probabilidades estatísticas de vitória (mandante, empate, visitante), projeção de média de gols (Over/Under), ambos marcam (BTTS), placares prováveis e insights analíticos baseados em forma recente e mando.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/momentum": {
+      "get": {
+        "summary": "Gráfico de Pressão & Momentum da Partida (Minuto a Minuto)",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna a linha do tempo minuto a minuto com o índice de pressão e dominância de ataque das equipes (-100 a +100), incluindo marcadores de eventos capitais do jogo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/shot-map": {
+      "get": {
+        "summary": "Mapa de Finalizações no Campo (Shot Map & xG dos Chutes)",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna as coordenadas espaciais (x, y) no campo de jogo de todas as finalizações, com indicação do resultado (gol, defesa, para fora, travado), probabilidade xG e parte do corpo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/absences": {
+      "get": {
+        "summary": "Desfalques e Departamento Médico dos clubes para a partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Lista atletas suspensos, lesionados ou em dúvida para a partida de ambos os clubes (mandante e visitante).",
         "parameters": [
           {
             "schema": {
