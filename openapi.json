@@ -36,7 +36,7 @@
         "tags": [
           "Autenticação & Planos"
         ],
-        "description": "Gera instantaneamente uma chave no formato 'bf_live_...' para consumir a API.",
+        "description": "Gera instantaneamente uma chave no formato 'bf_live_...' para consumir a API. Aceita senha para possibilitar login posterior.",
         "requestBody": {
           "required": true,
           "content": {
@@ -52,6 +52,10 @@
                     "type": "string",
                     "format": "email",
                     "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6
                   }
                 },
                 "required": [
@@ -129,9 +133,260 @@
         }
       }
     },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Login com usuário/e-mail e senha para obter a API Key",
+        "tags": [
+          "Autenticação & Planos"
+        ],
+        "description": "Permite autenticar na plataforma e recuperar sua chave de API e informações de plano.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "login",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "apiKey": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "userName": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "plan": {
+                          "type": "string",
+                          "enum": [
+                            "FREE",
+                            "PRO",
+                            "ENTERPRISE"
+                          ]
+                        },
+                        "rateLimitPerMinute": {
+                          "type": "number"
+                        },
+                        "isActive": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "userName",
+                        "email",
+                        "plan",
+                        "rateLimitPerMinute",
+                        "isActive"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "apiKey",
+                    "user"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/enterprise/register": {
+      "post": {
+        "summary": "Criar ou configurar conta do plano ENTERPRISE",
+        "tags": [
+          "Autenticação & Planos"
+        ],
+        "description": "Cria uma conta Enterprise com taxa de 1.000 requisições por minuto e suporte total.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userName": {
+                    "type": "string",
+                    "minLength": 2
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6
+                  }
+                },
+                "required": [
+                  "userName",
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "apiKey": {
+                      "type": "string"
+                    },
+                    "userName": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "FREE",
+                        "PRO",
+                        "ENTERPRISE"
+                      ]
+                    },
+                    "rateLimitPerMinute": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "apiKey",
+                    "userName",
+                    "email",
+                    "plan",
+                    "rateLimitPerMinute"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "summary": "Consultar dados da chave autenticada e limites de consumo",
+        "tags": [
+          "Autenticação & Planos"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/migrate-db": {
+      "get": {
+        "summary": "Executar migração de colunas e dados no banco de dados",
         "tags": [
           "Autenticação & Planos"
         ],
@@ -1422,6 +1677,24 @@
         }
       }
     },
+    "/api/v1/live/test-fcm-goal": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/live/test-fcm-topic": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/sync/debug": {
       "get": {
         "responses": {
@@ -1455,6 +1728,45 @@
         }
       }
     },
+    "/api/v1/sync/live": {
+      "get": {
+        "summary": "Sincronização ultra-rápida (sub-segundo) apenas das partidas ao vivo",
+        "tags": [
+          "Sincronização"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/sync/fix-logos": {
+      "get": {
+        "summary": "Atualizar escudos legados para o CDN oficial do Sofascore",
+        "tags": [
+          "Sincronização"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/sync/setup-enterprise": {
+      "get": {
+        "summary": "Configurar conta ENTERPRISE e migrar tabela api_keys",
+        "tags": [
+          "Sincronização"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/sync/push": {
       "post": {
         "summary": "Receber e persistir eventos e tabela do Sofascore via Push Worker (Admin/Worker)",
@@ -1464,6 +1776,256 @@
         "responses": {
           "200": {
             "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/news/leagues": {
+      "get": {
+        "summary": "Listar ligas e competições suportadas para notícias",
+        "tags": [
+          "Notícias & Imprensa"
+        ],
+        "description": "Retorna os códigos e apelidos das ligas suportadas pela central de notícias (ex: Brasileirão, Libertadores, Premier League, Champions).",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "number"
+                    },
+                    "leagues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "espnCode": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "aliases": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "espnCode",
+                          "name",
+                          "aliases"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "leagues"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/news/": {
+      "get": {
+        "summary": "Obter feed de notícias de futebol em tempo real (ESPN Brasil)",
+        "tags": [
+          "Notícias & Imprensa"
+        ],
+        "description": "Retorna as últimas notícias esportivas, manchetes, resumos, fotos de alta qualidade e links oficiais. Suporta filtro por liga (ex: 'bra.1', 'BRA-1', 'PL', 'libertadores', 'all') e busca por time (ex: 'flamengo', 'palmeiras').",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "league",
+            "required": false,
+            "description": "Código ou apelido da liga (ex: 'bra.1', 'BRA-1', 'PL', 'libertadores', 'all'). Padrão: 'all'"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "team",
+            "required": false,
+            "description": "Nome ou sigla do clube para filtrar notícias (ex: 'flamengo', 'palmeiras', 'corinthians', 'real madrid')"
+          },
+          {
+            "schema": {
+              "default": 15,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "description": "Quantidade máxima de notícias (1 a 50). Padrão: 15"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "league": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "cached": {
+                      "type": "boolean"
+                    },
+                    "articles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "publishedAt": {
+                            "type": "string"
+                          },
+                          "lastModified": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "imageUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {
+                              "leagues": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "abbreviation": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "teams": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "abbreviation": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "athletes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "leagues",
+                              "teams",
+                              "athletes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "description",
+                          "publishedAt",
+                          "source",
+                          "url",
+                          "imageUrl",
+                          "type",
+                          "categories"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "league",
+                    "total",
+                    "cached",
+                    "articles"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       }
@@ -1514,6 +2076,10 @@
     {
       "name": "Estádios",
       "description": "Praças esportivas, capacidade e cidades"
+    },
+    {
+      "name": "Notícias & Imprensa",
+      "description": "Feed de notícias de futebol em tempo real da ESPN Brasil"
     }
   ]
 }

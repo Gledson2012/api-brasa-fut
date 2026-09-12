@@ -22,6 +22,7 @@ import { authRoutes } from "./routes/auth.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { syncRoutes } from "./routes/sync.js";
 import { billingRoutes } from "./routes/billing.js";
+import { newsRoutes } from "./routes/news.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -64,6 +65,7 @@ export function buildApp() {
         { name: "Atletas", description: "Jogadores, scouts e dados físicos" },
         { name: "Competições", description: "Ligas, copas e temporadas" },
         { name: "Estádios", description: "Praças esportivas, capacidade e cidades" },
+        { name: "Notícias & Imprensa", description: "Feed de notícias de futebol em tempo real da ESPN Brasil" },
       ],
       components: {
         securitySchemes: {
@@ -113,6 +115,8 @@ export function buildApp() {
         webhooks: "/api/v1/webhooks",
         syncSofascore: "/api/v1/sync/sofascore",
         billingCheckout: "POST /api/v1/billing/checkout",
+        news: "/api/v1/news",
+        newsLeagues: "/api/v1/news/leagues",
       },
     };
   });
@@ -132,6 +136,7 @@ export function buildApp() {
   app.register(standingsRoutes, { prefix: "/api/v1/standings" });
   app.register(liveRoutes, { prefix: "/api/v1/live" });
   app.register(syncRoutes, { prefix: "/api/v1/sync" });
+  app.register(newsRoutes, { prefix: "/api/v1/news" });
 
   return app;
 }

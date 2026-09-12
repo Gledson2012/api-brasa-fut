@@ -285,6 +285,58 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(body.matchesSynced >= 1);
     assert.ok(body.standingsSynced >= 1);
   });
+
+  test("14. Listar ligas e competições suportadas para notícias (/api/v1/news/leagues)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/news/leagues",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.total >= 10);
+    assert.ok(Array.isArray(body.leagues));
+    assert.ok(body.leagues.some((l: any) => l.espnCode === "bra.1"));
+    assert.ok(body.leagues.some((l: any) => l.espnCode === "eng.1"));
+    assert.ok(body.leagues.some((l: any) => l.espnCode === "conmebol.libertadores"));
+  });
+
+  test("15. Obter feed de notícias do Brasileirão (/api/v1/news?league=bra.1&limit=5)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/news?league=bra.1&limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.league, "bra.1");
+    assert.ok(body.total > 0);
+    assert.ok(Array.isArray(body.articles));
+    const first = body.articles[0];
+    assert.ok(first.id);
+    assert.ok(first.title);
+    assert.equal(first.source, "ESPN Brasil");
+    assert.ok(first.url.startsWith("http"));
+  });
+
+  test("16. Obter notícias com filtro de clube (/api/v1/news?team=santos&limit=5)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/news?team=santos&limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(Array.isArray(body.articles));
+    // Cada notícia retornada deve ter ligação com o termo filtrado
+    for (const article of body.articles) {
+      const match =
+        article.title.toLowerCase().includes("santos") ||
+        article.description.toLowerCase().includes("santos") ||
+        article.categories.teams.some((t: any) => t.name.toLowerCase().includes("santos"));
+      assert.ok(match, `Notícia "${article.title}" deve ter relação com o Santos`);
+    }
+  });
 });
 
 
