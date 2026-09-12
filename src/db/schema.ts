@@ -417,12 +417,17 @@ export const playerSeasonStatistics = pgTable(
     shotsTotal: integer("shots_total").default(0).notNull(),
     shotsOnTarget: integer("shots_on_target").default(0).notNull(),
     keyPasses: integer("key_passes").default(0).notNull(),
+    cleanSheets: integer("clean_sheets").default(0).notNull(),
+    saves: integer("saves").default(0).notNull(),
+    goalsConceded: integer("goals_conceded").default(0).notNull(),
+    penaltySaves: integer("penalty_saves").default(0).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
     uniqueIndex("uq_player_season_stat").on(table.playerId, table.seasonId),
     index("idx_player_season_goals").on(table.seasonId, table.goals),
     index("idx_player_season_assists").on(table.seasonId, table.assists),
+    index("idx_player_season_clean_sheets").on(table.seasonId, table.cleanSheets),
   ]
 );
 

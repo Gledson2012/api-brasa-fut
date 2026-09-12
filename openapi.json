@@ -985,6 +985,49 @@
         }
       }
     },
+    "/api/v1/competitions/{id}/top-clean-sheets": {
+      "get": {
+        "summary": "Líderes de Clean Sheets (Goleiros com mais jogos sem sofrer gols)",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Retorna o ranking de goleiros e defesas menos vazadas da competição, com clean sheets, defesas e gols sofridos.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/teams/": {
       "get": {
         "summary": "Listar todos os clubes",
@@ -1271,6 +1314,30 @@
             "name": "seasonId",
             "required": false
           },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/players/{id}/career": {
+      "get": {
+        "summary": "Histórico completo de carreira e scouting do atleta",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Retorna o currículo completo temporada a temporada do atleta, com totais acumulados de carreira (gols, assistências, minutos, clean sheets, defesas e cartões).",
+        "parameters": [
           {
             "schema": {
               "type": "number"

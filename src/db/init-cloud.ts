@@ -70,8 +70,14 @@ async function initCloud() {
         UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1967/image' WHERE name ILIKE '%Athletico Paranaense%' AND logo_url LIKE '%wikimedia%';
       `;
 
-      // 3. Garantir coluna password_hash e conta ENTERPRISE no Neon
+      // 3. Garantir coluna password_hash e colunas de scout de goleiro/defesa
       await sql`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
+      await sql.unsafe(`
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS clean_sheets INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS saves INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS goals_conceded INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS penalty_saves INTEGER DEFAULT 0 NOT NULL;
+      `);
       const { hashPassword } = await import("../utils/password.js");
       const passHash = hashPassword("BrasaFut@Enterprise2026");
       const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";

@@ -165,6 +165,10 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
             keyPasses: playerSeasonStatistics.keyPasses,
             yellowCards: playerSeasonStatistics.yellowCards,
             redCards: playerSeasonStatistics.redCards,
+            cleanSheets: playerSeasonStatistics.cleanSheets,
+            saves: playerSeasonStatistics.saves,
+            goalsConceded: playerSeasonStatistics.goalsConceded,
+            penaltySaves: playerSeasonStatistics.penaltySaves,
           })
           .from(playerSeasonStatistics)
           .innerJoin(seasons, eq(playerSeasonStatistics.seasonId, seasons.id))
@@ -186,6 +190,131 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
             weightKg: player.weightKg,
           },
           statistics: stats,
+        };
+      });
+    }
+  );
+
+  // Histórico completo de carreira e scouting consolidado do atleta
+  app.get(
+    "/:id/career",
+    {
+      schema: {
+        tags: ["Atletas"],
+        summary: "Histórico completo de carreira e scouting do atleta",
+        description:
+          "Retorna o currículo completo temporada a temporada do atleta, com totais acumulados de carreira (gols, assistências, minutos, clean sheets, defesas e cartões).",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cacheKey = `player:${id}:career`;
+
+      return await cache.wrap(cacheKey, 120, async () => {
+        const [player] = await db.select().from(players).where(eq(players.id, id));
+        if (!player) {
+          return reply.status(404).send({ error: "Atleta não encontrado" });
+        }
+
+        const seasonRows = await db
+          .select({
+            seasonId: seasons.id,
+            seasonName: seasons.name,
+            competitionId: competitions.id,
+            competitionName: competitions.name,
+            competitionCode: competitions.code,
+            teamId: teams.id,
+            teamName: teams.name,
+            teamShortName: teams.shortName,
+            teamLogoUrl: teams.logoUrl,
+            appearances: playerSeasonStatistics.appearances,
+            matchesStarted: playerSeasonStatistics.matchesStarted,
+            minutesPlayed: playerSeasonStatistics.minutesPlayed,
+            goals: playerSeasonStatistics.goals,
+            assists: playerSeasonStatistics.assists,
+            rating: playerSeasonStatistics.rating,
+            expectedGoals: playerSeasonStatistics.expectedGoals,
+            expectedAssists: playerSeasonStatistics.expectedAssists,
+            shotsTotal: playerSeasonStatistics.shotsTotal,
+            shotsOnTarget: playerSeasonStatistics.shotsOnTarget,
+            keyPasses: playerSeasonStatistics.keyPasses,
+            yellowCards: playerSeasonStatistics.yellowCards,
+            redCards: playerSeasonStatistics.redCards,
+            cleanSheets: playerSeasonStatistics.cleanSheets,
+            saves: playerSeasonStatistics.saves,
+            goalsConceded: playerSeasonStatistics.goalsConceded,
+            penaltySaves: playerSeasonStatistics.penaltySaves,
+          })
+          .from(playerSeasonStatistics)
+          .innerJoin(seasons, eq(playerSeasonStatistics.seasonId, seasons.id))
+          .innerJoin(competitions, eq(seasons.competitionId, competitions.id))
+          .innerJoin(teams, eq(playerSeasonStatistics.teamId, teams.id))
+          .where(eq(playerSeasonStatistics.playerId, id));
+
+        // Calcular totais acumulados de carreira
+        const totals = seasonRows.reduce(
+          (acc, row) => {
+            acc.totalAppearances += row.appearances;
+            acc.totalMatchesStarted += row.matchesStarted;
+            acc.totalMinutesPlayed += row.minutesPlayed;
+            acc.totalGoals += row.goals;
+            acc.totalAssists += row.assists;
+            acc.totalYellowCards += row.yellowCards;
+            acc.totalRedCards += row.redCards;
+            acc.totalCleanSheets += row.cleanSheets;
+            acc.totalSaves += row.saves;
+            acc.totalGoalsConceded += row.goalsConceded;
+            acc.totalPenaltySaves += row.penaltySaves;
+            return acc;
+          },
+          {
+            totalAppearances: 0,
+            totalMatchesStarted: 0,
+            totalMinutesPlayed: 0,
+            totalGoals: 0,
+            totalAssists: 0,
+            totalYellowCards: 0,
+            totalRedCards: 0,
+            totalCleanSheets: 0,
+            totalSaves: 0,
+            totalGoalsConceded: 0,
+            totalPenaltySaves: 0,
+          }
+        );
+
+        // Clubes distintos pelos quais atuou
+        const distinctTeams = Array.from(
+          new Map(
+            seasonRows.map((r) => [
+              r.teamId,
+              { id: r.teamId, name: r.teamName, shortName: r.teamShortName, logoUrl: r.teamLogoUrl },
+            ])
+          ).values()
+        );
+
+        return {
+          player: {
+            id: player.id,
+            name: player.knownName || `${player.firstName} ${player.lastName}`,
+            knownName: player.knownName,
+            firstName: player.firstName,
+            lastName: player.lastName,
+            nationality: player.nationality,
+            position: player.primaryPosition,
+            photoUrl: player.photoUrl,
+            heightCm: player.heightCm,
+            weightKg: player.weightKg,
+          },
+          careerTotals: {
+            ...totals,
+            seasonsPlayed: seasonRows.length,
+            clubsRepresented: distinctTeams.length,
+          },
+          clubs: distinctTeams,
+          breakdownBySeason: seasonRows,
         };
       });
     }

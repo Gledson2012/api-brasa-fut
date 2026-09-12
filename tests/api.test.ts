@@ -337,6 +337,55 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       assert.ok(match, `Notícia "${article.title}" deve ter relação com o Santos`);
     }
   });
+
+  test("17. Obter currículo de carreira consolidado do atleta (/api/v1/players/:id/career)", async () => {
+    // Buscar Memphis Depay
+    const searchRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players?search=Memphis",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    const depay = JSON.parse(searchRes.payload).data[0];
+
+    const careerRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/players/${depay.id}/career`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(careerRes.statusCode, 200);
+    const body = JSON.parse(careerRes.payload);
+    assert.ok(body.player);
+    assert.equal(body.player.knownName, "Memphis Depay");
+    assert.ok(body.careerTotals);
+    assert.equal(typeof body.careerTotals.totalAppearances, "number");
+    assert.equal(typeof body.careerTotals.totalGoals, "number");
+    assert.ok(Array.isArray(body.breakdownBySeason));
+    assert.ok(Array.isArray(body.clubs));
+  });
+
+  test("18. Obter ranking de Clean Sheets / Goleiros (/api/v1/competitions/:id/top-clean-sheets)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/competitions/29/top-clean-sheets?limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.competitionId, 29);
+    assert.ok(Array.isArray(body.topCleanSheets));
+  });
+
+  test("19. Configuração e suporte a Futebol Feminino (Brasileirão Feminino, NWSL, UWCL, Liga F)", async () => {
+    const { TOURNAMENTS_CONFIG } = await import("../src/services/sofascoreSync.js");
+    const femaleCodes = ["BRA-W1", "NWSL", "UWCL", "LIGA-F"];
+    for (const code of femaleCodes) {
+      const found = TOURNAMENTS_CONFIG.find((t) => t.code === code);
+      assert.ok(found, `Torneio feminino ${code} deve estar configurado no TOURNAMENTS_CONFIG`);
+      assert.ok(found.tournamentId > 0);
+      assert.ok(found.seasonId > 0);
+      assert.ok(found.hasStandings === true);
+    }
+  });
 });
 
 

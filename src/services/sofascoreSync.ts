@@ -118,6 +118,11 @@ export const TOURNAMENTS_CONFIG: TournamentConfig[] = [
   { code: "LIG-1", name: "Ligue 1", tournamentId: 34, seasonId: 96127, country: "França", type: "LEAGUE", hasStandings: true, seasonName: "2026/2027", aliases: ["FRA-1"] },
   // UEFA Champions League
   { code: "UCL", name: "UEFA Champions League", tournamentId: 7, seasonId: 96518, country: "Europa", type: "INTERNATIONAL", hasStandings: true, seasonName: "2026/2027" },
+  // Futebol Feminino
+  { code: "BRA-W1", name: "Brasileirão Feminino A1", tournamentId: 10257, seasonId: 89138, country: "Brasil", type: "LEAGUE", hasStandings: true, seasonName: "2026", aliases: ["brasileirao-feminino", "bra-fem", "bra-w1"] },
+  { code: "NWSL", name: "National Women's Soccer League", tournamentId: 1690, seasonId: 88711, country: "Estados Unidos", type: "LEAGUE", hasStandings: true, seasonName: "2026", aliases: ["nwsl", "usa-w"] },
+  { code: "UWCL", name: "UEFA Women's Champions League", tournamentId: 696, seasonId: 96633, country: "Europa", type: "INTERNATIONAL", hasStandings: true, seasonName: "2026/2027", aliases: ["champions-feminina", "uwcl"] },
+  { code: "LIGA-F", name: "Liga F Moeve (Espanha Feminino)", tournamentId: 1127, seasonId: 97379, country: "Espanha", type: "LEAGUE", hasStandings: true, seasonName: "2026/2027", aliases: ["liga-f", "esp-w"] },
 ];
 
 export class SofascoreSyncService {
@@ -773,7 +778,18 @@ export class SofascoreSyncService {
         stats: Record<string, any>;
       }>();
 
-      const categories = ["goals", "assists", "rating", "expectedGoals", "expectedAssists", "totalShots", "keyPasses"];
+      const categories = [
+        "goals",
+        "assists",
+        "rating",
+        "expectedGoals",
+        "expectedAssists",
+        "totalShots",
+        "keyPasses",
+        "cleanSheet",
+        "saves",
+        "leastConceded",
+      ];
       for (const cat of categories) {
         const list = data.topPlayers[cat] || [];
         for (const item of list) {
@@ -814,6 +830,9 @@ export class SofascoreSyncService {
           const keyPasses = Number(item.stats.keyPasses || 0);
           const yellowCards = Number(item.stats.yellowCards || 0);
           const redCards = Number(item.stats.redCards || 0);
+          const cleanSheets = Number(item.stats.cleanSheet || 0);
+          const saves = Number(item.stats.saves || 0);
+          const goalsConceded = Number(item.stats.leastConceded || item.stats.mostConceded || 0);
 
           const existingStat = await db
             .select()
@@ -841,6 +860,9 @@ export class SofascoreSyncService {
                 keyPasses: keyPasses || existingStat[0].keyPasses,
                 yellowCards: yellowCards || existingStat[0].yellowCards,
                 redCards: redCards || existingStat[0].redCards,
+                cleanSheets: cleanSheets || existingStat[0].cleanSheets,
+                saves: saves || existingStat[0].saves,
+                goalsConceded: goalsConceded || existingStat[0].goalsConceded,
                 updatedAt: new Date(),
               })
               .where(eq(playerSeasonStatistics.id, existingStat[0].id));
@@ -860,6 +882,9 @@ export class SofascoreSyncService {
               keyPasses,
               yellowCards,
               redCards,
+              cleanSheets,
+              saves,
+              goalsConceded,
             });
           }
         } catch (itemErr) {

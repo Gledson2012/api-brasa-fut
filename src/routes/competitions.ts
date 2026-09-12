@@ -329,4 +329,131 @@ export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Líderes de Clean Sheets (Goleiros menos vazados / Jogos sem sofrer gols)
+  app.get(
+    "/:id/top-clean-sheets",
+    {
+      schema: {
+        tags: ["Competições"],
+        summary: "Líderes de Clean Sheets (Goleiros com mais jogos sem sofrer gols)",
+        description:
+          "Retorna o ranking de goleiros e defesas menos vazadas da competição, com clean sheets, defesas e gols sofridos.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          seasonId: z.coerce.number().optional(),
+          limit: z.coerce.number().min(1).max(100).default(20),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+      const { seasonId, limit } = request.query;
+
+      const cacheKey = `top-clean-sheets:${id}:${seasonId || "current"}:${limit}`;
+
+      return await cache.wrap(cacheKey, 60, async () => {
+        let season;
+        if (seasonId) {
+          [season] = await db
+            .select()
+            .from(seasons)
+            .where(
+              and(eq(seasons.id, seasonId), eq(seasons.competitionId, id))
+            );
+        } else {
+          [season] = await db
+            .select()
+            .from(seasons)
+            .where(
+              and(eq(seasons.competitionId, id), eq(seasons.isCurrent, true))
+            );
+          if (!season) {
+            [season] = await db
+              .select()
+              .from(seasons)
+              .where(eq(seasons.competitionId, id))
+              .orderBy(desc(seasons.id))
+              .limit(1);
+          }
+        }
+
+        if (!season) {
+          return { competitionId: id, total: 0, topCleanSheets: [] };
+        }
+
+        const stats = await db
+          .select({
+            playerId: players.id,
+            playerName: players.knownName,
+            playerFirstName: players.firstName,
+            playerLastName: players.lastName,
+            nationality: players.nationality,
+            position: players.primaryPosition,
+            photoUrl: players.photoUrl,
+            teamId: teams.id,
+            teamName: teams.name,
+            teamShortName: teams.shortName,
+            teamLogoUrl: teams.logoUrl,
+            cleanSheets: playerSeasonStatistics.cleanSheets,
+            saves: playerSeasonStatistics.saves,
+            goalsConceded: playerSeasonStatistics.goalsConceded,
+            penaltySaves: playerSeasonStatistics.penaltySaves,
+            appearances: playerSeasonStatistics.appearances,
+            minutesPlayed: playerSeasonStatistics.minutesPlayed,
+            rating: playerSeasonStatistics.rating,
+          })
+          .from(playerSeasonStatistics)
+          .innerJoin(players, eq(playerSeasonStatistics.playerId, players.id))
+          .innerJoin(teams, eq(playerSeasonStatistics.teamId, teams.id))
+          .where(
+            and(
+              eq(playerSeasonStatistics.seasonId, season.id),
+              eq(players.primaryPosition, "GOALKEEPER")
+            )
+          )
+          .orderBy(
+            desc(playerSeasonStatistics.cleanSheets),
+            desc(playerSeasonStatistics.saves),
+            desc(playerSeasonStatistics.rating)
+          )
+          .limit(limit);
+
+        return {
+          competitionId: id,
+          season: {
+            id: season.id,
+            name: season.name,
+            isCurrent: season.isCurrent,
+          },
+          total: stats.length,
+          topCleanSheets: stats.map((s, idx) => ({
+            rank: idx + 1,
+            player: {
+              id: s.playerId,
+              name: s.playerName || `${s.playerFirstName} ${s.playerLastName}`,
+              position: s.position,
+              nationality: s.nationality,
+              photoUrl: s.photoUrl,
+            },
+            team: {
+              id: s.teamId,
+              name: s.teamName,
+              shortName: s.teamShortName,
+              logoUrl: s.teamLogoUrl,
+            },
+            cleanSheets: s.cleanSheets,
+            saves: s.saves,
+            goalsConceded: s.goalsConceded,
+            penaltySaves: s.penaltySaves,
+            appearances: s.appearances,
+            minutesPlayed: s.minutesPlayed,
+            rating: s.rating,
+          })),
+        };
+      });
+    }
+  );
 };
