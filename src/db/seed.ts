@@ -147,27 +147,27 @@ export async function seed(closeClient: boolean = true) {
     .insert(players)
     .values([
       // Flamengo
-      { firstName: "Agustín", lastName: "Rossi", knownName: "Rossi", nationality: "Argentina", primaryPosition: "GOALKEEPER", heightCm: 193, weightKg: 85 },
-      { firstName: "Giorgian", lastName: "De Arrascaeta", knownName: "Arrascaeta", nationality: "Uruguai", primaryPosition: "MIDFIELDER", heightCm: 172, weightKg: 67 },
-      { firstName: "Pedro", lastName: "Guilherme", knownName: "Pedro", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 185, weightKg: 78 },
-      { firstName: "Gerson", lastName: "Santos", knownName: "Gerson", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 184, weightKg: 70 },
+      { firstName: "Agustín", lastName: "Rossi", knownName: "Rossi", nationality: "Argentina", primaryPosition: "GOALKEEPER", heightCm: 193, weightKg: 85, photoUrl: "https://api.sofascore.app/api/v1/player/820689/image" },
+      { firstName: "Giorgian", lastName: "De Arrascaeta", knownName: "Arrascaeta", nationality: "Uruguai", primaryPosition: "MIDFIELDER", heightCm: 172, weightKg: 67, photoUrl: "https://api.sofascore.app/api/v1/player/341648/image" },
+      { firstName: "Pedro", lastName: "Guilherme", knownName: "Pedro", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 185, weightKg: 78, photoUrl: "https://api.sofascore.app/api/v1/player/885315/image" },
+      { firstName: "Gerson", lastName: "Santos", knownName: "Gerson", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 184, weightKg: 70, photoUrl: "https://api.sofascore.app/api/v1/player/795493/image" },
       // Palmeiras
-      { firstName: "Weverton", lastName: "Pereira", knownName: "Weverton", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 189, weightKg: 89 },
-      { firstName: "Raphael", lastName: "Veiga", knownName: "Raphael Veiga", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 178, weightKg: 73 },
-      { firstName: "Estêvão", lastName: "Willian", knownName: "Estêvão", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 176, weightKg: 66 },
-      { firstName: "Gustavo", lastName: "Gómez", knownName: "Gustavo Gómez", nationality: "Paraguai", primaryPosition: "DEFENDER", heightCm: 185, weightKg: 86 },
+      { firstName: "Weverton", lastName: "Pereira", knownName: "Weverton", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 189, weightKg: 89, photoUrl: "https://api.sofascore.app/api/v1/player/47990/image" },
+      { firstName: "Raphael", lastName: "Veiga", knownName: "Raphael Veiga", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 178, weightKg: 73, photoUrl: "https://api.sofascore.app/api/v1/player/846747/image" },
+      { firstName: "Estêvão", lastName: "Willian", knownName: "Estêvão", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 176, weightKg: 66, photoUrl: "https://api.sofascore.app/api/v1/player/1478142/image" },
+      { firstName: "Gustavo", lastName: "Gómez", knownName: "Gustavo Gómez", nationality: "Paraguai", primaryPosition: "DEFENDER", heightCm: 185, weightKg: 86, photoUrl: "https://api.sofascore.app/api/v1/player/260389/image" },
       // Corinthians
-      { firstName: "Hugo", lastName: "Souza", knownName: "Hugo Souza", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 199, weightKg: 95 },
-      { firstName: "Rodrigo", lastName: "Garro", knownName: "Rodrigo Garro", nationality: "Argentina", primaryPosition: "MIDFIELDER", heightCm: 174, weightKg: 69 },
-      { firstName: "Memphis", lastName: "Depay", knownName: "Memphis Depay", nationality: "Holanda", primaryPosition: "FORWARD", heightCm: 176, weightKg: 78 },
-      { firstName: "Yuri", lastName: "Alberto", knownName: "Yuri Alberto", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 182, weightKg: 77 },
+      { firstName: "Hugo", lastName: "Souza", knownName: "Hugo Souza", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 199, weightKg: 95, photoUrl: "https://api.sofascore.app/api/v1/player/978939/image" },
+      { firstName: "Rodrigo", lastName: "Garro", knownName: "Rodrigo Garro", nationality: "Argentina", primaryPosition: "MIDFIELDER", heightCm: 174, weightKg: 69, photoUrl: "https://api.sofascore.app/api/v1/player/914041/image" },
+      { firstName: "Memphis", lastName: "Depay", knownName: "Memphis Depay", nationality: "Holanda", primaryPosition: "FORWARD", heightCm: 176, weightKg: 78, photoUrl: "https://api.sofascore.app/api/v1/player/138833/image" },
+      { firstName: "Yuri", lastName: "Alberto", knownName: "Yuri Alberto", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 182, weightKg: 77, photoUrl: "https://api.sofascore.app/api/v1/player/905463/image" },
       // São Paulo
-      { firstName: "Rafael", lastName: "Pires", knownName: "Rafael", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 192, weightKg: 87 },
-      { firstName: "Lucas", lastName: "Moura", knownName: "Lucas Moura", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 172, weightKg: 70 },
-      { firstName: "Jonathan", lastName: "Calleri", knownName: "Calleri", nationality: "Argentina", primaryPosition: "FORWARD", heightCm: 181, weightKg: 75 },
+      { firstName: "Rafael", lastName: "Pires", knownName: "Rafael", nationality: "Brasil", primaryPosition: "GOALKEEPER", heightCm: 192, weightKg: 87, photoUrl: "https://api.sofascore.app/api/v1/player/49454/image" },
+      { firstName: "Lucas", lastName: "Moura", knownName: "Lucas Moura", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 172, weightKg: 70, photoUrl: "https://api.sofascore.app/api/v1/player/104683/image" },
+      { firstName: "Jonathan", lastName: "Calleri", knownName: "Calleri", nationality: "Argentina", primaryPosition: "FORWARD", heightCm: 181, weightKg: 75, photoUrl: "https://api.sofascore.app/api/v1/player/343949/image" },
       // Atlético-MG
-      { firstName: "Givanildo", lastName: "Vieira", knownName: "Hulk", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 180, weightKg: 85 },
-      { firstName: "Gustavo", lastName: "Scarpa", knownName: "Gustavo Scarpa", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 176, weightKg: 70 },
+      { firstName: "Givanildo", lastName: "Vieira", knownName: "Hulk", nationality: "Brasil", primaryPosition: "FORWARD", heightCm: 180, weightKg: 85, photoUrl: "https://api.sofascore.app/api/v1/player/29778/image" },
+      { firstName: "Gustavo", lastName: "Scarpa", knownName: "Gustavo Scarpa", nationality: "Brasil", primaryPosition: "MIDFIELDER", heightCm: 176, weightKg: 70, photoUrl: "https://api.sofascore.app/api/v1/player/785806/image" },
     ])
     .returning();
 

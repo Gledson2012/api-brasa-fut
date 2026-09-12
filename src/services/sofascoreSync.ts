@@ -868,6 +868,18 @@ export class SofascoreSyncService {
       );
 
     if (found.length > 0) {
+      if (!found[0].photoUrl && sofaPlayer.id) {
+        const photoUrl = `https://api.sofascore.app/api/v1/player/${sofaPlayer.id}/image`;
+        await db
+          .update(players)
+          .set({
+            photoUrl,
+            heightCm: sofaPlayer.height || found[0].heightCm,
+            weightKg: sofaPlayer.weight || found[0].weightKg,
+            updatedAt: new Date(),
+          })
+          .where(eq(players.id, found[0].id));
+      }
       return found[0].id;
     }
 
