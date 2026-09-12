@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { venues } from "../db/schema.js";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, and } from "drizzle-orm";
 
 export const venueRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar estádios
@@ -15,22 +15,30 @@ export const venueRoutes: FastifyPluginAsyncZod = async (app) => {
         querystring: z.object({
           city: z.string().optional(),
           search: z.string().optional(),
+          limit: z.coerce.number().min(1).max(100).default(50),
+          page: z.coerce.number().min(1).default(1),
         }),
       },
     },
     async (request) => {
-      const { city, search } = request.query;
+      const { city, search, limit, page } = request.query;
+      const offset = (page - 1) * limit;
 
       let query = db.select().from(venues);
+      const conditions = [];
 
       if (city) {
-        query = query.where(eq(venues.city, city)) as typeof query;
+        conditions.push(eq(venues.city, city));
       }
       if (search) {
-        query = query.where(ilike(venues.name, `%${search}%`)) as typeof query;
+        conditions.push(ilike(venues.name, `%${search}%`));
       }
 
-      return await query;
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+
+      return await query.limit(limit).offset(offset);
     }
   );
 

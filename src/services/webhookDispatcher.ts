@@ -39,6 +39,18 @@ export class WebhookDispatcher {
     }
   }
 
+  public static async dispatchTo(
+    hook: typeof webhooks.$inferSelect,
+    payload: WebhookEventPayload
+  ) {
+    try {
+      const serializedPayload = JSON.stringify(payload);
+      await this.sendWebhook(hook, payload.event, serializedPayload);
+    } catch (err) {
+      console.error(`Erro ao disparar webhook individual para ${hook.url}:`, err);
+    }
+  }
+
   private static async sendWebhook(
     hook: typeof webhooks.$inferSelect,
     eventType: string,

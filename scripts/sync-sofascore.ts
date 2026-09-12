@@ -4,7 +4,12 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const TARGET_URL = process.env.TARGET_URL || "https://api-brasa-fut.vercel.app";
-const API_KEY = process.env.API_KEY || "bf_live_55d453438b0372a3582e34584110438a1eecbd87";
+const API_KEY = process.env.API_KEY;
+
+if (!API_KEY) {
+  console.error("❌ ERRO: A variável de ambiente API_KEY deve ser definida para autenticar o sync worker.");
+  process.exit(1);
+}
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {

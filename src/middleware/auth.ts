@@ -111,3 +111,35 @@ export async function authAndRateLimitMiddleware(
   // Anexar dados do usuário autenticado no request context
   (request as any).apiUser = keyRecord;
 }
+
+export function requireAdminOrPlan(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  allowedPlans: Array<"ENTERPRISE" | "PRO"> = ["ENTERPRISE"]
+): boolean {
+  const adminSecret = process.env.ADMIN_SECRET;
+  const adminHeader = request.headers["x-admin-key"];
+  if (adminSecret && adminHeader === adminSecret) {
+    return true;
+  }
+
+  const user = (request as any).apiUser;
+  if (!user) {
+    reply.status(401).send({ error: "Não autenticado", message: "Chave de API necessária." });
+    return false;
+  }
+
+  if (process.env.ADMIN_API_KEY && user.key === process.env.ADMIN_API_KEY) {
+    return true;
+  }
+
+  if (!allowedPlans.includes(user.plan)) {
+    reply.status(403).send({
+      error: "Acesso Negado",
+      message: `Esta operação requer privilégios administrativos ou plano ${allowedPlans.join(" ou ")}.`,
+    });
+    return false;
+  }
+
+  return true;
+}

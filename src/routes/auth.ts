@@ -63,7 +63,6 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         body: z.object({
           userName: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
           email: z.string().email("E-mail inválido"),
-          plan: z.enum(["FREE", "PRO", "ENTERPRISE"]).default("FREE"),
         }),
         response: {
           201: z.object({
@@ -79,7 +78,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const { userName, email, plan } = request.body;
+      const { userName, email } = request.body;
 
       // Verificar se e-mail já possui chave
       const [existing] = await db
@@ -97,20 +96,14 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       const randomPart = randomBytes(20).toString("hex");
       const generatedKey = `bf_live_${randomPart}`;
 
-      const rateLimitMap: Record<string, number> = {
-        FREE: 10,
-        PRO: 120,
-        ENTERPRISE: 1000,
-      };
-
       const [newKey] = await db
         .insert(apiKeys)
         .values({
           userName,
           email,
           key: generatedKey,
-          plan,
-          rateLimitPerMinute: rateLimitMap[plan] || 10,
+          plan: "FREE",
+          rateLimitPerMinute: 10,
           isActive: true,
         })
         .returning();

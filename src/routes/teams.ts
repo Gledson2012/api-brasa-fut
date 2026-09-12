@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { teams, teamRosters, players, venues, seasons } from "../db/schema.js";
-import { eq, ilike, and } from "drizzle-orm";
+import { eq, ilike, and, or } from "drizzle-orm";
 
 export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar times com filtros
@@ -15,11 +15,14 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         querystring: z.object({
           search: z.string().optional(),
           country: z.string().optional(),
+          limit: z.coerce.number().min(1).max(100).default(50),
+          page: z.coerce.number().min(1).default(1),
         }),
       },
     },
     async (request) => {
-      const { search, country } = request.query;
+      const { search, country, limit, page } = request.query;
+      const offset = (page - 1) * limit;
 
       let query = db
         .select({
@@ -40,14 +43,26 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         .from(teams)
         .leftJoin(venues, eq(teams.venueId, venues.id));
 
+      const conditions = [];
+
       if (search) {
-        query = query.where(ilike(teams.name, `%${search}%`)) as typeof query;
+        conditions.push(
+          or(
+            ilike(teams.name, `%${search}%`),
+            ilike(teams.shortName, `%${search}%`),
+            eq(teams.acronym, search.toUpperCase())
+          )
+        );
       }
       if (country) {
-        query = query.where(eq(teams.country, country)) as typeof query;
+        conditions.push(eq(teams.country, country));
       }
 
-      return await query;
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+
+      return await query.limit(limit).offset(offset);
     }
   );
 

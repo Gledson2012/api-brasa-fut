@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { realtimeBroker } from "../services/pubsub.js";
 import { MatchSimulator } from "../services/matchSimulator.js";
+import { requireAdminOrPlan } from "../middleware/auth.js";
 
 export const liveRoutes: FastifyPluginAsync = async (app) => {
   // Conexão WebSocket para receber eventos ao vivo (apenas em servidores persistentes)
@@ -31,22 +32,18 @@ export const liveRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  // Iniciar simulação automatizada de partida ao vivo
+  // Iniciar simulação automatizada de partida ao vivo (Desativado para manter 100% de dados reais)
   app.post("/simulate/start", async (request, reply) => {
-    const body = (request.body as { matchId?: number; speedMs?: number }) || {};
-    const matchId = body.matchId || 1;
-    const speedMs = body.speedMs || 4000;
-
-    try {
-      const result = await MatchSimulator.start(matchId, speedMs);
-      return result;
-    } catch (err: any) {
-      return reply.status(400).send({ error: err.message });
-    }
+    return reply.status(403).send({
+      error: "Simulações desativadas",
+      message: "A API opera exclusivamente com partidas e placares 100% REAIS (Sofascore Oficial). Geração de dados fictícios está bloqueada.",
+    });
   });
 
-  // Parar simulação de partida
+  // Parar simulação de partida (Admin / PRO)
   app.post("/simulate/stop", async (request, reply) => {
+    if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
+
     const body = (request.body as { matchId?: number }) || {};
     const matchId = body.matchId || 1;
 

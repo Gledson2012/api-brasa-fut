@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { SofascoreSyncService } from "../services/sofascoreSync.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { requireAdminOrPlan } from "../middleware/auth.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -51,10 +52,11 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Sincronização"],
-        summary: "Forçar sincronização imediata com Sofascore (ignora cache)",
+        summary: "Forçar sincronização imediata com Sofascore (ignora cache - Admin)",
       },
     },
     async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
       const result = await SofascoreSyncService.sync(true);
       return result;
     }
@@ -65,10 +67,12 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Sincronização"],
-        summary: "Receber e persistir eventos e tabela do Sofascore via Push Worker",
+        summary: "Receber e persistir eventos e tabela do Sofascore via Push Worker (Admin/Worker)",
       },
     },
     async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
+
       const body = request.body as {
         events?: any[];
         standings?: any[];

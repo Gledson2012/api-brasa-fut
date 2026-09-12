@@ -24,6 +24,6 @@ jobs:
 
       - name: Run Sofascore Sync Worker
         env:
-          TARGET_URL: "https://api-brasa-fut.vercel.app"
-          API_KEY: "bf_live_55d453438b0372a3582e34584110438a1eecbd87"
+          TARGET_URL: ${{ secrets.TARGET_URL || 'https://api-brasa-fut.vercel.app' }}
+          API_KEY: ${{ secrets.API_KEY || secrets.BRASA_API_KEY }}
         run: npm run sync:sofascore

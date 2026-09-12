@@ -13,7 +13,7 @@ import {
 } from "../db/schema.js";
 import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
-import { SofascoreSyncService } from "../services/sofascoreSync.js";
+import { requireAdminOrPlan } from "../middleware/auth.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -53,12 +53,14 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
           seasonId: z.coerce.number().optional(),
           teamId: z.coerce.number().optional(),
           round: z.string().optional(),
+          limit: z.coerce.number().min(1).max(100).default(50),
+          page: z.coerce.number().min(1).default(1),
         }),
       },
     },
     async (request) => {
-      try { await SofascoreSyncService.sync(false); } catch (e) {}
-      const { date, status, live, seasonId, teamId, round } = request.query;
+      const { date, status, live, seasonId, teamId, round, limit, page } = request.query;
+      const offset = (page - 1) * limit;
 
       const homeTeam = db
         .select({
@@ -149,7 +151,10 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query.orderBy(asc(matches.kickoffTime));
+      return await query
+        .orderBy(asc(matches.kickoffTime))
+        .limit(limit)
+        .offset(offset);
     }
   );
 
@@ -163,7 +168,6 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async () => {
-      try { await SofascoreSyncService.sync(false); } catch (e) {}
       const homeTeam = db
         .select({
           id: teams.id,
@@ -237,50 +241,20 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const { id } = request.params;
 
-      const [match] = await db
-        .select({
-          id: matches.id,
-          round: matches.round,
-          kickoffTime: matches.kickoffTime,
-          status: matches.status,
-          homeScore: matches.homeScore,
-          awayScore: matches.awayScore,
-          homeScoreHt: matches.homeScoreHt,
-          awayScoreHt: matches.awayScoreHt,
-          homeScoreEt: matches.homeScoreEt,
-          awayScoreEt: matches.awayScoreEt,
-          homeScorePenalties: matches.homeScorePenalties,
-          awayScorePenalties: matches.awayScorePenalties,
-          seasonId: matches.seasonId,
-          homeTeamId: matches.homeTeamId,
-          awayTeamId: matches.awayTeamId,
-          venueId: matches.venueId,
-        })
-        .from(matches)
-        .where(eq(matches.id, id));
+      const match = await db.query.matches.findFirst({
+        where: eq(matches.id, id),
+        with: {
+          homeTeam: true,
+          awayTeam: true,
+          venue: true,
+        },
+      });
 
       if (!match) {
         return reply.status(404).send({ error: "Partida não encontrada" });
       }
 
-      const [homeTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, match.homeTeamId));
-      const [awayTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, match.awayTeamId));
-      const [venue] = match.venueId
-        ? await db.select().from(venues).where(eq(venues.id, match.venueId))
-        : [null];
-
-      return {
-        ...match,
-        homeTeam,
-        awayTeam,
-        venue,
-      };
+      return match;
     }
   );
 
@@ -499,6 +473,8 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
+
       const { id } = request.params;
       const body = request.body;
 
@@ -601,6 +577,8 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
+
       const { id } = request.params;
       const body = request.body;
 

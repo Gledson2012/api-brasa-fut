@@ -19,6 +19,11 @@ export interface SofascoreEvent {
   slug: string;
   roundInfo?: { round: number };
   startTimestamp: number;
+  tournament?: {
+    uniqueTournament?: {
+      id?: number;
+    };
+  };
   status: {
     code: number;
     description: string;
@@ -93,14 +98,28 @@ export class SofascoreSyncService {
       ]);
 
       const trimmed = stdout.trim();
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-        return null;
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        return JSON.parse(trimmed) as T;
       }
-      return JSON.parse(trimmed) as T;
-    } catch (err) {
-      console.warn(`[SofascoreSync] Erro ao buscar ${url}:`, err);
-      return null;
+    } catch {
+      // Fallback para fetch nativo caso curl não esteja disponível
+      try {
+        const response = await fetch(url, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            Accept: "application/json, text/plain, */*",
+          },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (response.ok) {
+          return (await response.json()) as T;
+        }
+      } catch (err: any) {
+        console.warn(`[SofascoreSync] Erro ao buscar ${url}:`, err.message);
+      }
     }
+    return null;
   }
 
   public static mapStatus(sofascoreStatus: { type: string; description: string }): "SCHEDULED" | "FIRST_HALF" | "HALF_TIME" | "SECOND_HALF" | "EXTRA_TIME" | "PENALTIES" | "FINISHED" | "POSTPONED" | "CANCELLED" {
@@ -158,91 +177,95 @@ export class SofascoreSyncService {
     try {
       console.log("🔄 [SofascoreSync] Iniciando sincronização automática com Sofascore...");
 
-      // 1. Obter ou criar competição Série A e Temporada 2026
-      let [comp] = await db
-        .select()
-        .from(competitions)
-        .where(eq(competitions.code, "BRA-1"));
-
-      if (!comp) {
-        [comp] = await db
-          .insert(competitions)
-          .values({
-            name: "Brasileirão Série A",
-            code: "BRA-1",
-            country: "Brasil",
-            type: "LEAGUE",
-            logoUrl:
-              "https://upload.wikimedia.org/wikipedia/pt/b/b4/Campeonato_Brasileiro_S%C3%A9rie_A_logo.png",
-          })
-          .returning();
-      }
-
-      let [season] = await db
-        .select()
-        .from(seasons)
-        .where(
-          and(eq(seasons.competitionId, comp.id), eq(seasons.name, "2026"))
-        );
-
-      if (!season) {
-        [season] = await db
-          .insert(seasons)
-          .values({
-            competitionId: comp.id,
-            name: "2026",
-            startDate: "2026-04-10",
-            endDate: "2026-12-08",
-            isCurrent: true,
-          })
-          .returning();
-      }
-
-      // 2. Buscar rodada atual do Brasileirão 2026 (uniqueTournament: 325, season: 87678)
-      const roundsData = await this.fetchJson<{
-        currentRound?: { round: number };
-      }>("https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/rounds");
-
-      const currentRoundNum = roundsData?.currentRound?.round || 27;
-      const roundsToSync = [
-        Math.max(1, currentRoundNum - 1),
-        currentRoundNum,
-        Math.min(38, currentRoundNum + 1),
+      const LEAGUES = [
+        { code: "BRA-1", name: "Brasileirão Série A", tournamentId: 325, seasonId: 87678 },
+        { code: "BRA-2", name: "Brasileirão Série B", tournamentId: 390, seasonId: 89840 },
+        { code: "LIB", name: "CONMEBOL Libertadores", tournamentId: 384, seasonId: 87760 },
       ];
 
-      const allEvents: SofascoreEvent[] = [];
-
-      for (const r of roundsToSync) {
-        const roundData = await this.fetchJson<{ events: SofascoreEvent[] }>(
-          `https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/events/round/${r}`
-        );
-        if (roundData?.events) {
-          allEvents.push(...roundData.events);
-        }
-      }
-
-      // 3. Buscar partidas ao vivo globais para atualizar minutos e placares instantâneos
+      // 1. Buscar partidas ao vivo globais uma única vez
       const liveData = await this.fetchJson<{ events: SofascoreEvent[] }>(
         "https://api.sofascore.com/api/v1/sport/football/events/live"
       );
+      const globalLiveEvents = liveData?.events || [];
 
-      if (liveData?.events) {
-        for (const liveEv of liveData.events) {
-          const isAlreadyAdded = allEvents.some((e) => e.id === liveEv.id);
-          if (!isAlreadyAdded && (liveEv.homeTeam?.nameCode || liveEv.slug?.includes("brasil") || liveEv.slug?.includes("serie-a"))) {
-            allEvents.push(liveEv);
+      let totalMatchesSynced = 0;
+      let totalStandingsSynced = 0;
+      let mainRoundNum = 27;
+
+      for (const league of LEAGUES) {
+        try {
+          // 2. Buscar rodada atual da liga
+          const roundsData = await this.fetchJson<{
+            currentRound?: { round: number };
+          }>(
+            `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/rounds`
+          );
+
+          const currentRoundNum = roundsData?.currentRound?.round || 27;
+          if (league.code === "BRA-1") {
+            mainRoundNum = currentRoundNum;
           }
+
+          const roundsToSync = Array.from(
+            new Set([
+              Math.max(1, currentRoundNum - 1),
+              currentRoundNum,
+              Math.min(38, currentRoundNum + 1),
+            ])
+          );
+
+          const leagueEvents: SofascoreEvent[] = [];
+
+          for (const r of roundsToSync) {
+            const roundData = await this.fetchJson<{ events: SofascoreEvent[] }>(
+              `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/events/round/${r}`
+            );
+            if (roundData?.events) {
+              leagueEvents.push(...roundData.events);
+            }
+          }
+
+          // 3. Adicionar partidas ao vivo exclusivas deste torneio
+          for (const liveEv of globalLiveEvents) {
+            const matchesTournament =
+              liveEv.tournament?.uniqueTournament?.id === league.tournamentId;
+            const isAlreadyAdded = leagueEvents.some((e) => e.id === liveEv.id);
+            if (matchesTournament && !isAlreadyAdded) {
+              leagueEvents.push(liveEv);
+            }
+          }
+
+          // 4. Buscar tabela de classificação da liga
+          const standingsData = await this.fetchJson<{
+            standings?: Array<{ rows?: SofascoreStandingsRow[] }>;
+          }>(
+            `https://api.sofascore.com/api/v1/unique-tournament/${league.tournamentId}/season/${league.seasonId}/standings/total`
+          );
+          const rows = standingsData?.standings?.[0]?.rows || [];
+
+          // 5. Persistir dados reais
+          const res = await this.processData(
+            leagueEvents,
+            rows,
+            currentRoundNum,
+            league.code
+          );
+          totalMatchesSynced += res.matchesSynced;
+          totalStandingsSynced += res.standingsSynced;
+        } catch (leagueErr: any) {
+          console.warn(`[SofascoreSync] Erro ao sincronizar ${league.name}:`, leagueErr.message);
         }
       }
 
-      // 4. Buscar tabela de classificação
-      const standingsData = await this.fetchJson<{
-        standings?: Array<{ rows?: SofascoreStandingsRow[] }>;
-      }>("https://api.sofascore.com/api/v1/unique-tournament/325/season/87678/standings/total");
-      const rows = standingsData?.standings?.[0]?.rows || [];
-
-      // 5. Mapear e sincronizar times, estádios e partidas no banco
-      return await this.processData(allEvents, rows, currentRoundNum);
+      return {
+        success: true,
+        message: `Sincronização oficial concluída! ${totalMatchesSynced} partidas e ${totalStandingsSynced} classificações atualizadas.`,
+        matchesSynced: totalMatchesSynced,
+        standingsSynced: totalStandingsSynced,
+        currentRound: mainRoundNum,
+        timestamp: new Date().toISOString(),
+      };
     } catch (err: any) {
       console.error("❌ [SofascoreSync] Falha na sincronização:", err);
       return {
@@ -319,9 +342,9 @@ export class SofascoreSyncService {
 
     for (const event of allEvents) {
       try {
-        const homeTeamId = await this.findOrCreateTeam(event.homeTeam);
-        const awayTeamId = await this.findOrCreateTeam(event.awayTeam);
-        const venueId = await this.findOrCreateVenue(event.venue);
+        const homeTeamId = await this.findOrCreateTeam(event.homeTeam, competitionCode);
+        const awayTeamId = await this.findOrCreateTeam(event.awayTeam, competitionCode);
+        const venueId = await this.findOrCreateVenue(event.venue, competitionCode);
 
         const status = this.mapStatus(event.status);
         const kickoff = new Date(event.startTimestamp * 1000);
@@ -396,7 +419,7 @@ export class SofascoreSyncService {
     const rows = standingsRows || [];
     for (const row of rows) {
       try {
-        const teamId = await this.findOrCreateTeam(row.team);
+        const teamId = await this.findOrCreateTeam(row.team, competitionCode);
         const goalDiff = (row.scoresFor || 0) - (row.scoresAgainst || 0);
 
         const existingStanding = await db
@@ -460,31 +483,53 @@ export class SofascoreSyncService {
     };
   }
 
-  private static async findOrCreateTeam(sofaTeam: {
-    id: number;
-    name: string;
-    shortName?: string;
-    nameCode?: string;
-  }): Promise<number> {
+  private static async findOrCreateTeam(
+    sofaTeam: {
+      id: number;
+      name: string;
+      shortName?: string;
+      nameCode?: string;
+    },
+    competitionCode: string = "BRA-1"
+  ): Promise<number> {
     const name = sofaTeam.name.trim();
     const shortName = sofaTeam.shortName?.trim() || name;
-    const acronym = sofaTeam.nameCode || shortName.substring(0, 3).toUpperCase();
+    const acronym = (sofaTeam.nameCode?.trim() || shortName.substring(0, 3)).toUpperCase();
 
-    const found = await db
+    // 1. Busca exata por acrônimo ou nome completo
+    const exactMatch = await db
       .select()
       .from(teams)
       .where(
         or(
-          ilike(teams.name, `%${shortName}%`),
-          ilike(teams.shortName, `%${shortName}%`),
-          eq(teams.acronym, acronym)
+          eq(teams.acronym, acronym),
+          eq(teams.name, name),
+          eq(teams.shortName, shortName)
         )
       );
 
-    if (found.length > 0) {
-      return found[0].id;
+    if (exactMatch.length > 0) {
+      return exactMatch[0].id;
     }
 
+    // 2. Busca aproximada apenas para termos de busca com tamanho mínimo
+    if (shortName.length >= 4) {
+      const fuzzyMatch = await db
+        .select()
+        .from(teams)
+        .where(
+          or(
+            ilike(teams.name, `%${shortName}%`),
+            ilike(teams.shortName, `%${shortName}%`)
+          )
+        );
+
+      if (fuzzyMatch.length > 0) {
+        return fuzzyMatch[0].id;
+      }
+    }
+
+    const defaultCountry = competitionCode === "LIB" ? "América do Sul" : "Brasil";
     const logoUrl = `https://api.sofascore.app/api/v1/team/${sofaTeam.id}/image`;
     const [inserted] = await db
       .insert(teams)
@@ -492,7 +537,7 @@ export class SofascoreSyncService {
         name,
         shortName,
         acronym,
-        country: "Brasil",
+        country: defaultCountry,
         logoUrl,
       })
       .returning();
@@ -500,16 +545,20 @@ export class SofascoreSyncService {
     return inserted.id;
   }
 
-  private static async findOrCreateVenue(sofaVenue?: {
-    name?: string;
-    city?: { name: string };
-    stadium?: { name: string; capacity?: number };
-    capacity?: number;
-  }): Promise<number | null> {
+  private static async findOrCreateVenue(
+    sofaVenue?: {
+      name?: string;
+      city?: { name: string };
+      stadium?: { name: string; capacity?: number };
+      capacity?: number;
+    },
+    competitionCode: string = "BRA-1"
+  ): Promise<number | null> {
     if (!sofaVenue?.name && !sofaVenue?.stadium?.name) return null;
 
     const name = (sofaVenue.stadium?.name || sofaVenue.name || "").trim();
-    const city = sofaVenue.city?.name || "Brasil";
+    const defaultCountry = competitionCode === "LIB" ? "América do Sul" : "Brasil";
+    const city = sofaVenue.city?.name || defaultCountry;
     const capacity = sofaVenue.stadium?.capacity || sofaVenue.capacity || null;
 
     const found = await db
@@ -526,7 +575,7 @@ export class SofascoreSyncService {
       .values({
         name,
         city,
-        country: "Brasil",
+        country: defaultCountry,
         capacity,
         surface: "Grass",
       })

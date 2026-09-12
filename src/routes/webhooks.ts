@@ -167,7 +167,7 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
         return reply.status(404).send({ error: "Webhook não encontrado" });
       }
 
-      await WebhookDispatcher.dispatch({
+      await WebhookDispatcher.dispatchTo(hook, {
         event: "STATUS_CHANGE",
         matchId: 1,
         timestamp: new Date().toISOString(),
@@ -177,7 +177,7 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
         },
       });
 
-      return { message: "Disparo de teste enfileirado para o webhook." };
+      return { message: "Disparo de teste realizado exclusivamente para este webhook." };
     }
   );
 };
