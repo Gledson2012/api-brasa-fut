@@ -51,6 +51,24 @@ async function initCloud() {
       console.log("🎉 Banco Neon totalmente populado com sucesso!");
     } else {
       console.log(`✅ Banco Neon já contém ${compCount.count} competições cadastradas.`);
+      
+      // Atualizar escudos antigos para o CDN oficial Sofascore se existirem
+      await sql`
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/5981/image' WHERE name ILIKE '%Flamengo%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1963/image' WHERE name ILIKE '%Palmeiras%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1981/image' WHERE name ILIKE '%São Paulo%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1957/image' WHERE name ILIKE '%Corinthians%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1958/image' WHERE name ILIKE '%Botafogo%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1961/image' WHERE name ILIKE '%Fluminense%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1974/image' WHERE name ILIKE '%Vasco%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1977/image' WHERE name ILIKE '%Atlético Mineiro%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1954/image' WHERE name ILIKE '%Cruzeiro%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1966/image' WHERE name ILIKE '%Internacional%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/5926/image' WHERE name ILIKE '%Grêmio%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1955/image' WHERE name ILIKE '%Bahia%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/2020/image' WHERE name ILIKE '%Fortaleza%' AND logo_url LIKE '%wikimedia%';
+        UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1967/image' WHERE name ILIKE '%Athletico Paranaense%' AND logo_url LIKE '%wikimedia%';
+      `;
       await sql.end();
     }
   } catch (err) {
