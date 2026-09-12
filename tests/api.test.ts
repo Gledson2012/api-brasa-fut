@@ -926,6 +926,129 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(Array.isArray(champBody.editions));
     assert.ok(champBody.editions[0].champion);
   });
+
+  test("42. Guia de Transmissão de TV & Streaming (/matches/:id/broadcast)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/broadcast",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, 1);
+    assert.ok(Array.isArray(body.channels));
+    assert.ok(body.channels.length > 0);
+    const ch = body.channels[0];
+    assert.ok(ch.channelName);
+    assert.ok(ch.type);
+    assert.ok(typeof ch.isFreeToAir === "boolean");
+  });
+
+  test("43. Feed de Narração Lance a Lance Textual (/matches/:id/commentary)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/commentary",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, 1);
+    assert.ok(body.totalComments > 0);
+    assert.ok(Array.isArray(body.commentary));
+    const firstComment = body.commentary[0];
+    assert.ok(typeof firstComment.minute === "number");
+    assert.ok(firstComment.headline);
+    assert.ok(firstComment.text);
+    assert.ok(firstComment.type);
+
+    // Teste com filtro importantOnly
+    const impRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/commentary?importantOnly=true",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(impRes.statusCode, 200);
+    const impBody = JSON.parse(impRes.payload);
+    assert.ok(impBody.commentary.every((c: any) => c.isImportant));
+  });
+
+  test("44. Supercomputador Preditivo Monte Carlo (/standings/supercomputer)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/standings/supercomputer?seasonId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.seasonId, 1);
+    assert.equal(body.simulationsRun, 10000);
+    assert.ok(body.cutoffScores);
+    assert.equal(body.cutoffScores.safetyScoreZ4, 45);
+    assert.ok(Array.isArray(body.projections));
+    assert.ok(body.projections.length > 0);
+    const topProj = body.projections[0];
+    assert.ok(topProj.projectedFinalPoints > 0);
+    assert.ok(typeof topProj.titleProbabilityPct === "number");
+    assert.ok(typeof topProj.libertadoresG4ProbabilityPct === "number");
+  });
+
+  test("45. Folha Salarial e Fair Play Financeiro (/finances/teams/:id e /finances/ranking)", async () => {
+    // Finanças de um clube
+    const teamFinRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/finances/teams/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(teamFinRes.statusCode, 200);
+    const teamFinBody = JSON.parse(teamFinRes.payload);
+    assert.ok(teamFinBody.teamId > 0);
+    assert.ok(teamFinBody.monthlyPayrollMillionsBrl > 0);
+    assert.ok(["HEALTHY", "MODERATE", "RISK_DEFICIT"].includes(teamFinBody.financialFairPlayStatus));
+    assert.ok(teamFinBody.costPerPointThousandsBrl > 0);
+
+    // Ranking de finanças
+    const rankRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/finances/ranking?seasonId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(rankRes.statusCode, 200);
+    const rankBody = JSON.parse(rankRes.payload);
+    assert.ok(Array.isArray(rankBody.rankingByPayroll));
+    assert.ok(Array.isArray(rankBody.rankingByEfficiency));
+    assert.ok(rankBody.totalClubsAnalyzed > 0);
+  });
+
+  test("46. Radar de Wonderkids e Relatório de Olheiro (/scouting/talents e /scouting/players/:id)", async () => {
+    // Lista de promessas
+    const talentsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/scouting/talents?maxAge=22",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(talentsRes.statusCode, 200);
+    const talentsBody = JSON.parse(talentsRes.payload);
+    assert.ok(Array.isArray(talentsBody.wonderkids));
+    if (talentsBody.wonderkids.length > 0) {
+      const kid = talentsBody.wonderkids[0];
+      assert.ok(kid.age <= 22);
+      assert.ok(kid.potentialRating > 0);
+      assert.ok(kid.attributes.pace > 0);
+      assert.ok(kid.similarPlaystyle);
+    }
+
+    // Ficha individual de scouting
+    const scoutRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/scouting/players/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(scoutRes.statusCode, 200);
+    const scoutBody = JSON.parse(scoutRes.payload);
+    assert.ok(scoutBody.playerId > 0);
+    assert.ok(scoutBody.attributes.tacticalIQ > 0);
+    assert.ok(scoutBody.scoutVerdict.recommendation);
+  });
 });
 
 

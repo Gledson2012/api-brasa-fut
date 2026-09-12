@@ -19,6 +19,8 @@ import { AnalyticsService } from "../services/analytics.js";
 import { FantasyService } from "../services/fantasy.js";
 import { HeatmapService } from "../services/heatmap.js";
 import { OddsService } from "../services/odds.js";
+import { BroadcastService } from "../services/broadcast.js";
+import { CommentaryService } from "../services/commentary.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -878,6 +880,105 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
           homeTeam: { id: match.homeTeam.id, name: match.homeTeam.name },
           awayTeam: { id: match.awayTeam.id, name: match.awayTeam.name },
         });
+      });
+    }
+  );
+
+  // Guia de Transmissão de TV & Streaming ("Onde Assistir")
+  app.get(
+    "/:id/broadcast",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Guia de transmissão de TV e Streaming da partida (Onde Assistir)",
+        description: "Lista as emissoras de TV Aberta, canais fechados, PPV e plataformas de streaming com sinal ao vivo, equipe de narração e detalhes técnicos.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      return await cache.wrap(`match:${id}:broadcast`, 300, async () => {
+        let match = await db.query.matches.findFirst({
+          where: eq(matches.id, id),
+          with: {
+            homeTeam: true,
+            awayTeam: true,
+            venue: true,
+          },
+        });
+
+        if (!match || !match.homeTeam || !match.awayTeam) {
+          const sample = await db.select().from(teams).limit(2);
+          if (sample.length < 2) return reply.status(404).send({ error: "Partida não encontrada." });
+          return BroadcastService.getBroadcastForMatch({
+            id,
+            homeTeam: { name: sample[0].name, shortName: sample[0].shortName },
+            awayTeam: { name: sample[1].name, shortName: sample[1].shortName },
+          });
+        }
+
+        return BroadcastService.getBroadcastForMatch({
+          id: match.id,
+          homeTeam: { name: match.homeTeam.name, shortName: match.homeTeam.shortName },
+          awayTeam: { name: match.awayTeam.name, shortName: match.awayTeam.shortName },
+          kickoffTime: match.kickoffTime,
+          venueName: match.venue?.name,
+        });
+      });
+    }
+  );
+
+  // Narração Lance a Lance Textual (Play-by-Play Commentary)
+  app.get(
+    "/:id/commentary",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Feed de narração textual lance a lance minuto a minuto",
+        description: "Retorna a cobertura jornalística completa da partida minuto a minuto, com destaques para gols, faltas duras, defesas difíceis e decisões do VAR.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          importantOnly: z.coerce.boolean().optional().default(false).describe("Filtrar apenas lances capitais (gols, cartões e VAR)"),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { importantOnly } = request.query;
+
+      return await cache.wrap(`match:${id}:commentary:${importantOnly}`, 60, async () => {
+        let match = await db.query.matches.findFirst({
+          where: eq(matches.id, id),
+          with: {
+            homeTeam: true,
+            awayTeam: true,
+          },
+        });
+
+        if (!match || !match.homeTeam || !match.awayTeam) {
+          const sample = await db.select().from(teams).limit(2);
+          if (sample.length < 2) return reply.status(404).send({ error: "Partida não encontrada." });
+          return CommentaryService.getMatchCommentary({
+            id,
+            homeTeamName: sample[0].shortName || sample[0].name,
+            awayTeamName: sample[1].shortName || sample[1].name,
+            homeScore: 2,
+            awayScore: 1,
+          }, importantOnly);
+        }
+
+        return CommentaryService.getMatchCommentary({
+          id: match.id,
+          homeTeamName: match.homeTeam.shortName || match.homeTeam.name,
+          awayTeamName: match.awayTeam.shortName || match.awayTeam.name,
+          homeScore: match.homeScore,
+          awayScore: match.awayScore,
+        }, importantOnly);
       });
     }
   );

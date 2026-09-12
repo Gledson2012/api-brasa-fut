@@ -2241,6 +2241,64 @@
         }
       }
     },
+    "/api/v1/matches/{id}/broadcast": {
+      "get": {
+        "summary": "Guia de transmissão de TV e Streaming da partida (Onde Assistir)",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Lista as emissoras de TV Aberta, canais fechados, PPV e plataformas de streaming com sinal ao vivo, equipe de narração e detalhes técnicos.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/commentary": {
+      "get": {
+        "summary": "Feed de narração textual lance a lance minuto a minuto",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna a cobertura jornalística completa da partida minuto a minuto, com destaques para gols, faltas duras, defesas difíceis e decisões do VAR.",
+        "parameters": [
+          {
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "importantOnly",
+            "required": false,
+            "description": "Filtrar apenas lances capitais (gols, cartões e VAR)"
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/standings/live": {
       "get": {
         "summary": "Obter tabela de classificação virtual em tempo real (Live Standings)",
@@ -2338,6 +2396,31 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/standings/supercomputer": {
+      "get": {
+        "summary": "Supercomputador Preditivo: Projeção Final da Temporada & Notas de Corte",
+        "tags": [
+          "Classificação"
+        ],
+        "description": "Executa 10.000 simulações Monte Carlo das rodadas restantes, calculando a pontuação final esperada de cada clube, probabilidade refinada de Título, G-4, Sul-Americana e Rebaixamento, e a nota de corte matemática.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response"
@@ -3076,6 +3159,127 @@
             "name": "minEv",
             "required": false,
             "description": "Valor esperado mínimo em porcentagem (ex: 3.0)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/finances/teams/{teamId}": {
+      "get": {
+        "summary": "Perfil financeiro, folha salarial e conformidade com o Fair Play",
+        "tags": [
+          "Finanças & Fair Play Financeiro"
+        ],
+        "description": "Retorna a estimativa de folha salarial mensal do clube, orçamento anual, teto salarial, custo por ponto conquistado e status perante o Fair Play Financeiro da CBF.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "teamId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/finances/ranking": {
+      "get": {
+        "summary": "Ranking de folhas salariais e custo-benefício por ponto",
+        "tags": [
+          "Finanças & Fair Play Financeiro"
+        ],
+        "description": "Compara todos os clubes por folha salarial total e por eficiência financeira (menor investimento em folha por ponto ganho).",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/scouting/talents": {
+      "get": {
+        "summary": "Radar de jovens talentos e promessas (Wonderkids)",
+        "tags": [
+          "Scouting & Olheiro de Talentos"
+        ],
+        "description": "Lista atletas promissores com idade até o limite definido, exibindo potencial de desenvolvimento, atributos e clube atual.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 22,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "maxAge",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "GOALKEEPER",
+                "DEFENDER",
+                "MIDFIELDER",
+                "FORWARD"
+              ]
+            },
+            "in": "query",
+            "name": "position",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 10,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/scouting/players/{playerId}": {
+      "get": {
+        "summary": "Ficha técnica e relatório completo de scouting do atleta",
+        "tags": [
+          "Scouting & Olheiro de Talentos"
+        ],
+        "description": "Retorna a teia de atributos técnicos e físicos (0 a 100), nota de potencial máximo, jogador de estilo similar no mundo e recomendação do olheiro.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "playerId",
+            "required": true
           }
         ],
         "responses": {
