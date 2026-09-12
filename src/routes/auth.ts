@@ -357,6 +357,14 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
           updated_at = NOW();
       `;
 
+      // 3. Garantir colunas de clean sheets e defesas em player_season_statistics
+      await client.unsafe(`
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS clean_sheets INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS saves INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS goals_conceded INTEGER DEFAULT 0 NOT NULL;
+        ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS penalty_saves INTEGER DEFAULT 0 NOT NULL;
+      `);
+
       return {
         success: true,
         message: "Migração do banco de dados e conta ENTERPRISE configurada com sucesso!",
