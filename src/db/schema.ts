@@ -342,6 +342,7 @@ export const apiKeys = pgTable(
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     userName: varchar("user_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 150 }).notNull().unique(),
+    passwordHash: varchar("password_hash", { length: 255 }),
     key: varchar("key", { length: 64 }).notNull().unique(),
     plan: apiPlanEnum("plan").default("FREE").notNull(),
     rateLimitPerMinute: integer("rate_limit_per_minute").default(10).notNull(),

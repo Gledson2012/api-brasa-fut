@@ -156,4 +156,48 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.equal(statusData.apiKey.currentPlan, "PRO");
     assert.equal(statusData.apiKey.rateLimitPerMinute, 60);
   });
+
+  test("8. Login com sucesso usando login/senha da conta Enterprise", async () => {
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        login: "enterprise@brasafut.com.br",
+        password: "BrasaFut@Enterprise2026",
+      },
+    });
+    assert.equal(loginRes.statusCode, 200);
+    const body = JSON.parse(loginRes.payload);
+    assert.equal(body.message, "Login realizado com sucesso!");
+    assert.ok(body.apiKey.startsWith("bf_live_enterprise_"));
+    assert.equal(body.user.plan, "ENTERPRISE");
+    assert.equal(body.user.rateLimitPerMinute, 1000);
+  });
+
+  test("9. Login com senha incorreta deve falhar com 401", async () => {
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        login: "enterprise@brasafut.com.br",
+        password: "SenhaErrada123",
+      },
+    });
+    assert.equal(loginRes.statusCode, 401);
+    const body = JSON.parse(loginRes.payload);
+    assert.ok(body.error.includes("Credenciais inválidas"));
+  });
+
+  test("10. Acesso com chave Enterprise retorna perfil correto em /api/v1/auth/me", async () => {
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+    });
+    assert.equal(meRes.statusCode, 200);
+    const body = JSON.parse(meRes.payload);
+    assert.equal(body.plan, "ENTERPRISE");
+    assert.equal(body.rateLimitPerMinute, 1000);
+  });
 });
+

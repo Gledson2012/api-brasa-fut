@@ -15,6 +15,7 @@ import {
   playerSeasonStatistics,
   payments,
 } from "./schema.js";
+import { hashPassword } from "../utils/password.js";
 
 export async function seed(closeClient: boolean = true) {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
@@ -211,8 +212,18 @@ export async function seed(closeClient: boolean = true) {
   console.log("🔑 Inserindo Chaves de API para demonstração...");
   await db.insert(apiKeys).values([
     {
+      userName: "enterprise_admin",
+      email: "enterprise@brasafut.com.br",
+      passwordHash: hashPassword("BrasaFut@Enterprise2026"),
+      key: "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45",
+      plan: "ENTERPRISE",
+      rateLimitPerMinute: 1000,
+      isActive: true,
+    },
+    {
       userName: "Dev Demonstração",
       email: "dev@brasafut.com.br",
+      passwordHash: hashPassword("DevPro@2026"),
       key: "bf_live_demo_test_key_123",
       plan: "PRO",
       rateLimitPerMinute: 120,
@@ -221,6 +232,7 @@ export async function seed(closeClient: boolean = true) {
     {
       userName: "Usuário Gratuito",
       email: "free@brasafut.com.br",
+      passwordHash: hashPassword("FreeUser@2026"),
       key: "bf_live_free_test_key_456",
       plan: "FREE",
       rateLimitPerMinute: 10,

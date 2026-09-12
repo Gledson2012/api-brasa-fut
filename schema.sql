@@ -247,6 +247,7 @@ CREATE TABLE api_keys (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_name VARCHAR(120) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255),
     key VARCHAR(64) NOT NULL UNIQUE,
     plan api_plan NOT NULL DEFAULT 'FREE',
     rate_limit_per_minute INT NOT NULL DEFAULT 10,

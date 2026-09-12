@@ -69,6 +69,26 @@ async function initCloud() {
         UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/2020/image' WHERE name ILIKE '%Fortaleza%' AND logo_url LIKE '%wikimedia%';
         UPDATE teams SET logo_url = 'https://api.sofascore.app/api/v1/team/1967/image' WHERE name ILIKE '%Athletico Paranaense%' AND logo_url LIKE '%wikimedia%';
       `;
+
+      // 3. Garantir coluna password_hash e conta ENTERPRISE no Neon
+      await sql`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
+      const { hashPassword } = await import("../utils/password.js");
+      const passHash = hashPassword("BrasaFut@Enterprise2026");
+      const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
+
+      await sql`
+        INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
+        VALUES ('enterprise_admin', 'enterprise@brasafut.com.br', ${passHash}, ${key}, 'ENTERPRISE', 1000, true)
+        ON CONFLICT (email) DO UPDATE SET
+          user_name = EXCLUDED.user_name,
+          password_hash = EXCLUDED.password_hash,
+          key = EXCLUDED.key,
+          plan = 'ENTERPRISE',
+          rate_limit_per_minute = 1000,
+          is_active = true,
+          updated_at = NOW();
+      `;
+
       await sql.end();
     }
   } catch (err) {
