@@ -60,20 +60,20 @@ export async function seed(closeClient: boolean = true) {
   const insertedTeams = await db
     .insert(teams)
     .values([
-      { name: "Clube de Regatas do Flamengo", shortName: "Flamengo", acronym: "FLA", foundedYear: 1895, country: "Brasil", venueId: venueMap.get("Maracanã"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Flamengo_braz_logo.svg" },
-      { name: "Sociedade Esportiva Palmeiras", shortName: "Palmeiras", acronym: "PAL", foundedYear: 1914, country: "Brasil", venueId: venueMap.get("Allianz Parque"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/1/10/Palmeiras_logo.svg" },
-      { name: "São Paulo Futebol Clube", shortName: "São Paulo", acronym: "SAO", foundedYear: 1930, country: "Brasil", venueId: venueMap.get("MorumBIS"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6f/Brasao_do_Sao_Paulo_Futebol_Clube.svg" },
-      { name: "Sport Club Corinthians Paulista", shortName: "Corinthians", acronym: "COR", foundedYear: 1910, country: "Brasil", venueId: venueMap.get("Neo Química Arena"), logoUrl: "https://upload.wikimedia.org/wikipedia/pt/b/b4/Corinthians_simbolo.png" },
-      { name: "Botafogo de Futebol e Regatas", shortName: "Botafogo", acronym: "BOT", foundedYear: 1904, country: "Brasil", venueId: venueMap.get("Nilton Santos"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/c/cb/Escudo_Botafogo.png" },
-      { name: "Fluminense Football Club", shortName: "Fluminense", acronym: "FLU", foundedYear: 1902, country: "Brasil", venueId: venueMap.get("Maracanã"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/a/ad/Fluminense_FC_escudo.png" },
-      { name: "Club de Regatas Vasco da Gama", shortName: "Vasco da Gama", acronym: "VAS", foundedYear: 1898, country: "Brasil", venueId: venueMap.get("São Januário"), logoUrl: "https://upload.wikimedia.org/wikipedia/pt/a/ac/CRVascodaGama.png" },
-      { name: "Clube Atlético Mineiro", shortName: "Atlético-MG", acronym: "CAM", foundedYear: 1908, country: "Brasil", venueId: venueMap.get("Mineirão"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/2/27/Clube_Atl%C3%A9tico_Mineiro_logo.svg" },
-      { name: "Cruzeiro Esporte Clube", shortName: "Cruzeiro", acronym: "CRU", foundedYear: 1921, country: "Brasil", venueId: venueMap.get("Mineirão"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/bc/Cruzeiro_Esporte_Clube_%28logo%29.svg" },
-      { name: "Sport Club Internacional", shortName: "Internacional", acronym: "INT", foundedYear: 1909, country: "Brasil", venueId: venueMap.get("Beira-Rio"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/f1/Escudo_do_Sport_Club_Internacional.svg" },
-      { name: "Grêmio Foot-Ball Porto Alegrense", shortName: "Grêmio", acronym: "GRE", foundedYear: 1903, country: "Brasil", venueId: venueMap.get("Arena do Grêmio"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Gremio-logo.svg" },
-      { name: "Esporte Clube Bahia", shortName: "Bahia", acronym: "BAH", foundedYear: 1931, country: "Brasil", venueId: venueMap.get("Casa de Apostas Arena Fonte Nova"), logoUrl: "https://upload.wikimedia.org/wikipedia/pt/9/90/ECBahia.png" },
-      { name: "Fortaleza Esporte Clube", shortName: "Fortaleza", acronym: "FOR", foundedYear: 1918, country: "Brasil", venueId: venueMap.get("Arena Castelão"), logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/44/FortalezaEC.svg" },
-      { name: "Club Athletico Paranaense", shortName: "Athletico-PR", acronym: "CAP", foundedYear: 1924, country: "Brasil", venueId: venueMap.get("Ligga Arena"), logoUrl: "https://upload.wikimedia.org/wikipedia/pt/c/c7/Club_Athletico_Paranaense_2018.png" },
+      { name: "Clube de Regatas do Flamengo", shortName: "Flamengo", acronym: "FLA", foundedYear: 1895, country: "Brasil", venueId: venueMap.get("Maracanã"), logoUrl: "https://api.sofascore.app/api/v1/team/5981/image" },
+      { name: "Sociedade Esportiva Palmeiras", shortName: "Palmeiras", acronym: "PAL", foundedYear: 1914, country: "Brasil", venueId: venueMap.get("Allianz Parque"), logoUrl: "https://api.sofascore.app/api/v1/team/1963/image" },
+      { name: "São Paulo Futebol Clube", shortName: "São Paulo", acronym: "SAO", foundedYear: 1930, country: "Brasil", venueId: venueMap.get("MorumBIS"), logoUrl: "https://api.sofascore.app/api/v1/team/1981/image" },
+      { name: "Sport Club Corinthians Paulista", shortName: "Corinthians", acronym: "COR", foundedYear: 1910, country: "Brasil", venueId: venueMap.get("Neo Química Arena"), logoUrl: "https://api.sofascore.app/api/v1/team/1957/image" },
+      { name: "Botafogo de Futebol e Regatas", shortName: "Botafogo", acronym: "BOT", foundedYear: 1904, country: "Brasil", venueId: venueMap.get("Nilton Santos"), logoUrl: "https://api.sofascore.app/api/v1/team/1958/image" },
+      { name: "Fluminense Football Club", shortName: "Fluminense", acronym: "FLU", foundedYear: 1902, country: "Brasil", venueId: venueMap.get("Maracanã"), logoUrl: "https://api.sofascore.app/api/v1/team/1961/image" },
+      { name: "Club de Regatas Vasco da Gama", shortName: "Vasco da Gama", acronym: "VAS", foundedYear: 1898, country: "Brasil", venueId: venueMap.get("São Januário"), logoUrl: "https://api.sofascore.app/api/v1/team/1974/image" },
+      { name: "Clube Atlético Mineiro", shortName: "Atlético-MG", acronym: "CAM", foundedYear: 1908, country: "Brasil", venueId: venueMap.get("Mineirão"), logoUrl: "https://api.sofascore.app/api/v1/team/1977/image" },
+      { name: "Cruzeiro Esporte Clube", shortName: "Cruzeiro", acronym: "CRU", foundedYear: 1921, country: "Brasil", venueId: venueMap.get("Mineirão"), logoUrl: "https://api.sofascore.app/api/v1/team/1954/image" },
+      { name: "Sport Club Internacional", shortName: "Internacional", acronym: "INT", foundedYear: 1909, country: "Brasil", venueId: venueMap.get("Beira-Rio"), logoUrl: "https://api.sofascore.app/api/v1/team/1966/image" },
+      { name: "Grêmio Foot-Ball Porto Alegrense", shortName: "Grêmio", acronym: "GRE", foundedYear: 1903, country: "Brasil", venueId: venueMap.get("Arena do Grêmio"), logoUrl: "https://api.sofascore.app/api/v1/team/5926/image" },
+      { name: "Esporte Clube Bahia", shortName: "Bahia", acronym: "BAH", foundedYear: 1931, country: "Brasil", venueId: venueMap.get("Casa de Apostas Arena Fonte Nova"), logoUrl: "https://api.sofascore.app/api/v1/team/1955/image" },
+      { name: "Fortaleza Esporte Clube", shortName: "Fortaleza", acronym: "FOR", foundedYear: 1918, country: "Brasil", venueId: venueMap.get("Arena Castelão"), logoUrl: "https://api.sofascore.app/api/v1/team/2020/image" },
+      { name: "Club Athletico Paranaense", shortName: "Athletico-PR", acronym: "CAP", foundedYear: 1924, country: "Brasil", venueId: venueMap.get("Ligga Arena"), logoUrl: "https://api.sofascore.app/api/v1/team/1967/image" },
     ])
     .returning();
 

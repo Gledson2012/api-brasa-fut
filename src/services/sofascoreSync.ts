@@ -951,6 +951,15 @@ export class SofascoreSyncService {
       );
 
     if (exactMatch.length > 0) {
+      if (sofaTeam.id) {
+        const logoUrl = `https://api.sofascore.app/api/v1/team/${sofaTeam.id}/image`;
+        if (exactMatch[0].logoUrl !== logoUrl) {
+          await db
+            .update(teams)
+            .set({ logoUrl, updatedAt: new Date() })
+            .where(eq(teams.id, exactMatch[0].id));
+        }
+      }
       return exactMatch[0].id;
     }
 
@@ -967,6 +976,15 @@ export class SofascoreSyncService {
         );
 
       if (fuzzyMatch.length > 0) {
+        if (sofaTeam.id) {
+          const logoUrl = `https://api.sofascore.app/api/v1/team/${sofaTeam.id}/image`;
+          if (fuzzyMatch[0].logoUrl !== logoUrl) {
+            await db
+              .update(teams)
+              .set({ logoUrl, updatedAt: new Date() })
+              .where(eq(teams.id, fuzzyMatch[0].id));
+          }
+        }
         return fuzzyMatch[0].id;
       }
     }
