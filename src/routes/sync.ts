@@ -47,6 +47,42 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     }
   );
 
+  app.get(
+    "/fix-logos",
+    {
+      schema: {
+        tags: ["Sincronização"],
+        summary: "Atualizar escudos legados para o CDN oficial do Sofascore",
+      },
+    },
+    async () => {
+      const { client } = await import("../db/index.js");
+      const updates = [
+        { name: "Flamengo", id: 5981 },
+        { name: "Palmeiras", id: 1963 },
+        { name: "São Paulo", id: 1981 },
+        { name: "Corinthians", id: 1957 },
+        { name: "Botafogo", id: 1958 },
+        { name: "Fluminense", id: 1961 },
+        { name: "Vasco da Gama", id: 1974 },
+        { name: "Atlético Mineiro", id: 1977 },
+        { name: "Cruzeiro", id: 1954 },
+        { name: "Internacional", id: 1966 },
+        { name: "Grêmio", id: 5926 },
+        { name: "Bahia", id: 1955 },
+        { name: "Fortaleza", id: 2020 },
+        { name: "Athletico Paranaense", id: 1967 },
+      ];
+
+      for (const t of updates) {
+        const logo = `https://api.sofascore.app/api/v1/team/${t.id}/image`;
+        await client`UPDATE teams SET logo_url = ${logo} WHERE name ILIKE ${'%' + t.name + '%'};`;
+      }
+
+      return { success: true, message: "Escudos atualizados com sucesso para CDN Sofascore!", count: updates.length };
+    }
+  );
+
   app.post(
     "/sofascore",
     {
