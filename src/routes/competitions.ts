@@ -2,19 +2,24 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { competitions, seasons, playerSeasonStatistics, players, teams } from "../db/schema.js";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, sql } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { AnalyticsService } from "../services/analytics.js";
 
 export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
-  // Listar todas as competições
+  // Listar todas as competições com filtros por país, tipo ou termo de busca
   app.get(
     "/",
     {
       schema: {
         tags: ["Competições"],
         summary: "Listar todas as competições",
-        description: "Retorna todas as ligas e copas cadastradas no sistema.",
+        description: "Retorna todas as ligas e copas cadastradas no sistema com filtros opcionais por país, tipo ou busca.",
+        querystring: z.object({
+          country: z.string().optional().describe("Filtrar por país ou região (ex: Brasil, Inglaterra, Espanha, Europa)"),
+          type: z.enum(["LEAGUE", "CUP", "INTERNATIONAL"]).optional().describe("Filtrar por formato (LEAGUE, CUP, INTERNATIONAL)"),
+          search: z.string().optional().describe("Buscar por nome da competição"),
+        }),
         response: {
           200: z.array(
             z.object({
@@ -30,9 +35,71 @@ export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
         },
       },
     },
+    async (request) => {
+      const { country, type, search } = request.query;
+      const cacheKey = `competitions:list:${country || "all"}:${type || "all"}:${search || "all"}`;
+
+      return await cache.wrap(cacheKey, 120, async () => {
+        const conditions = [];
+        if (country) {
+          conditions.push(ilike(competitions.country, `%${country}%`));
+        }
+        if (type) {
+          conditions.push(eq(competitions.type, type));
+        }
+        if (search) {
+          conditions.push(ilike(competitions.name, `%${search}%`));
+        }
+
+        if (conditions.length > 0) {
+          return await db
+            .select()
+            .from(competitions)
+            .where(and(...conditions))
+            .orderBy(asc(competitions.name));
+        }
+
+        return await db
+          .select()
+          .from(competitions)
+          .orderBy(asc(competitions.country), asc(competitions.name));
+      });
+    }
+  );
+
+  // Listar todos os países com competições disponíveis
+  app.get(
+    "/countries",
+    {
+      schema: {
+        tags: ["Competições"],
+        summary: "Listar todos os países e quantidade de ligas",
+        description: "Retorna o catálogo de todos os países cadastrados com a contagem de campeonatos disponíveis em cada um.",
+        response: {
+          200: z.array(
+            z.object({
+              country: z.string(),
+              totalCompetitions: z.number(),
+            })
+          ),
+        },
+      },
+    },
     async () => {
-      return await cache.wrap("competitions:list", 300, async () => {
-        return await db.select().from(competitions);
+      return await cache.wrap("competitions:countries", 300, async () => {
+        const rows = await db
+          .select({
+            country: competitions.country,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(competitions)
+          .groupBy(competitions.country)
+          .orderBy(asc(competitions.country));
+
+        return rows.map((r) => ({
+          country: r.country || "Internacional",
+          totalCompetitions: Number(r.count),
+        }));
       });
     }
   );
