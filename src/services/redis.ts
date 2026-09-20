@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { cache } from "./cache.js";
 
 interface RedisConfig {
@@ -55,7 +55,7 @@ class RedisCacheService {
         console.log("[Redis] Conectado com sucesso");
       });
 
-      this.client.on("error", (err) => {
+      this.client.on("error", (err: Error) => {
         console.error("[Redis] Erro:", err.message);
         this.isConnected = false;
       });

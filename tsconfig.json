@@ -12,5 +12,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*", "api/**/*"]
+  "include": ["src/**/*", "api/**/*"],
+  "exclude": ["src/services/observability.ts"]
 }
