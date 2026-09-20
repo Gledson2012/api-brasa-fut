@@ -185,6 +185,24 @@ npm run dev
 - `GET /api/v1/odds/bookmakers` - Diretório oficial de casas de apostas parceiras (Bet365, Betano, Betfair, Pinnacle, Stake, etc.), taxas médias de payout e status regulatório.
 - `GET /api/v1/odds/bookmakers/:id` - Detalhes de um bookmaker específico.
 
+### 💰 Valuation de Atletas & Contratos (Transfermarkt Style)
+- `GET /api/v1/players/:id/market-value` - Valor de mercado em Euros (€) e Reais (R$), pico histórico, término do contrato, multas rescisórias (nacional e internacional) e gráfico anual de valorização.
+- `GET /api/v1/players/market-values/ranking` - Top jogadores mais valiosos do campeonato.
+
+### ⚡ Power Ranking dos Clubes & Índice Elo (FotMob / Opta Style)
+- `GET /api/v1/rankings/power-ranking` - Classificação contínua de força dos clubes baseada em Rating Elo dinâmico, forma recente dos últimos 5 jogos, saldo de gols esperado por 90 min (xGD) e dificuldade de calendário (Strength of Schedule).
+
+### 📺 Central de Transmissões & Guia de Jogos na TV
+- `GET /api/v1/broadcasts/guide` - Grade completa de transmissões de futebol do dia (TV Aberta, Fechada e Streaming com narradores e comentaristas escalados).
+- `GET /api/v1/broadcasts/today` - Atalho para saber onde assistir aos jogos de hoje.
+
+### 🌤️ Condições da Partida: Clima, Gramado & Altitude
+- `GET /api/v1/matches/:id/conditions` - Meteorologia da partida (temperatura, umidade, vento), tipo de gramado (natural vs sintético), altitude do estádio e laudo de impacto físico e aerodinâmico na bola.
+- `GET /api/v1/matches/:id/h2h` - Confronto direto histórico entre os dois clubes da partida com vitórias, empates e últimos jogos.
+
+### 🤝 Fair Play & Disciplina da Competição
+- `GET /api/v1/competitions/:id/fair-play` - Tabela de disciplina da liga com pontos de penalidade calculados por cartões amarelos, vermelhos e faltas.
+
 ---
 
 ## 📜 Licença

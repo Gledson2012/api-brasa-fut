@@ -1384,6 +1384,126 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.equal(detail.name, "Bet365");
     assert.ok(detail.averagePayoutPct > 90);
   });
+
+  test("59. Valuation de Atletas e Ranking de Valores de Mercado (/players/:id/market-value e /players/market-values/ranking)", async () => {
+    // Ranking de jogadores mais valiosos
+    const rankingRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players/market-values/ranking?limit=10",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(rankingRes.statusCode, 200);
+    const rankingBody = JSON.parse(rankingRes.payload);
+    assert.ok(rankingBody.total > 0);
+    assert.ok(Array.isArray(rankingBody.ranking));
+    assert.ok(rankingBody.ranking[0].marketValueEurMillions > 0);
+    assert.ok(rankingBody.ranking[0].marketValueBrlMillions > 0);
+
+    // Detalhe financeiro de um atleta
+    const valRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/players/1/market-value",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(valRes.statusCode, 200);
+    const valBody = JSON.parse(valRes.payload);
+    assert.equal(valBody.playerId, 1);
+    assert.ok(valBody.marketValueEur > 0);
+    assert.ok(valBody.releaseClauseDomesticBrl > 0);
+    assert.ok(valBody.releaseClauseInternationalEur > 0);
+    assert.ok(Array.isArray(valBody.historicalValuation));
+  });
+
+  test("60. Power Ranking Dinâmico dos Clubes com Elo e Momentum (/rankings/power-ranking)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/rankings/power-ranking?competitionId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(Array.isArray(body.rankings));
+    assert.ok(body.rankings.length >= 8);
+    const top = body.rankings[0];
+    assert.equal(top.rank, 1);
+    assert.ok(top.eloRating > 1800);
+    assert.ok(Array.isArray(top.recentForm));
+    assert.ok(typeof top.momentumIndex === "number");
+    assert.ok(top.strengthOfSchedule);
+  });
+
+  test("61. Guia Global de Transmissões na TV e Streaming (/broadcasts/guide e /broadcasts/today)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/broadcasts/guide",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.totalMatches > 0);
+    assert.ok(Array.isArray(body.availableNetworks));
+    assert.ok(Array.isArray(body.matches));
+    const firstMatch = body.matches[0];
+    assert.ok(firstMatch.channels.length > 0);
+    assert.ok(firstMatch.channels[0].channelName);
+
+    // Alias /today
+    const todayRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/broadcasts/today",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(todayRes.statusCode, 200);
+  });
+
+  test("62. Condições Climáticas, Gramado e Altitude da Partida (/matches/:id/conditions)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/conditions",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, 1);
+    assert.ok(body.venue);
+    assert.ok(body.pitch);
+    assert.ok(body.pitch.surfaceType);
+    assert.ok(body.weather);
+    assert.ok(typeof body.weather.temperatureCelsius === "number");
+    assert.ok(typeof body.weather.humidityPercentage === "number");
+    assert.ok(body.intelAnalysis);
+    assert.ok(body.intelAnalysis.ballTrajectoryBehavior);
+  });
+
+  test("63. Retrospecto Direto da Partida H2H (/matches/:id/h2h)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/h2h",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.homeTeamId);
+    assert.ok(body.awayTeamId);
+    assert.equal(typeof body.totalMatches, "number");
+    assert.ok(Array.isArray(body.matches));
+  });
+
+  test("64. Tabela de Fair Play e Disciplina da Liga (/competitions/:id/fair-play)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/competitions/1/fair-play",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.competitionId, 1);
+    assert.ok(Array.isArray(body.fairPlayTable));
+    assert.ok(body.fairPlayTable.length > 0);
+    const leader = body.fairPlayTable[0];
+    assert.equal(leader.rank, 1);
+    assert.ok(typeof leader.penaltyPoints === "number");
+  });
 });
 
 

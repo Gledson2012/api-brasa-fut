@@ -38,6 +38,8 @@ import { penaltiesRoutes } from "./routes/penalties.js";
 import { attendanceRoutes } from "./routes/attendance.js";
 import { awardsRoutes } from "./routes/awards.js";
 import { highlightsRoutes } from "./routes/highlights.js";
+import { rankingRoutes } from "./routes/rankings.js";
+import { broadcastRoutes } from "./routes/broadcasts.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -92,6 +94,8 @@ export function buildApp() {
         { name: "Público & Bilheteria dos Estádios", description: "Médias de público pagante, taxa de ocupação das arenas e renda bruta acumulada" },
         { name: "Premiações & Hall da Fama", description: "Bola de Ouro, Craque da Temporada, Golden Boy Revelação e Seleção do Ano" },
         { name: "Vídeos & Melhores Momentos (Highlights)", description: "Feeds de melhores momentos, vídeos em streaming, iframe embeds e restrições geográficas (geoblocking)" },
+        { name: "Rankings & Índices de Força", description: "Power Ranking dinâmico dos clubes, Ratings Elo e indicadores de Momentum" },
+        { name: "Transmissões & Onde Assistir", description: "Guia completo de transmissões de futebol em TV Aberta, Fechada e Streaming" },
       ],
       components: {
         securitySchemes: {
@@ -132,11 +136,14 @@ export function buildApp() {
         authRegister: "POST /api/v1/auth/register",
         authPlans: "GET /api/v1/auth/plans",
         competitions: "/api/v1/competitions",
+        competitionFairPlay: "/api/v1/competitions/:id/fair-play",
         teams: "/api/v1/teams",
         teamFixtures: "/api/v1/teams/:id/fixtures",
         venues: "/api/v1/venues",
         players: "/api/v1/players",
         playerCompare: "/api/v1/players/compare?p1=X&p2=Y",
+        playerMarketValue: "/api/v1/players/:id/market-value",
+        playerValuationRanking: "/api/v1/players/market-values/ranking",
         matches: "/api/v1/matches",
         matchesLive: "/api/v1/matches/live",
         standings: "/api/v1/standings?seasonId=3",
@@ -198,6 +205,11 @@ export function buildApp() {
         matchHighlights: "/api/v1/matches/:id/highlights",
         matchBoxScore: "/api/v1/matches/:id/box-score",
         oddsBookmakers: "/api/v1/odds/bookmakers",
+        powerRanking: "/api/v1/rankings/power-ranking?competitionId=1",
+        broadcastGuide: "/api/v1/broadcasts/guide",
+        broadcastToday: "/api/v1/broadcasts/today",
+        matchConditions: "/api/v1/matches/:id/conditions",
+        matchH2H: "/api/v1/matches/:id/h2h",
       },
     };
   });
@@ -233,6 +245,8 @@ export function buildApp() {
   app.register(attendanceRoutes, { prefix: "/api/v1/attendance" });
   app.register(awardsRoutes, { prefix: "/api/v1/awards" });
   app.register(highlightsRoutes, { prefix: "/api/v1/highlights" });
+  app.register(rankingRoutes, { prefix: "/api/v1/rankings" });
+  app.register(broadcastRoutes, { prefix: "/api/v1/broadcasts" });
 
   return app;
 }

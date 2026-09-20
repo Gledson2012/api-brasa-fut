@@ -27,6 +27,7 @@ import { VarService } from "../services/var.js";
 import { PenaltiesService } from "../services/penalties.js";
 import { BoxScoreService } from "../services/boxscore.js";
 import { HighlightsService } from "../services/highlights.js";
+import { ConditionsService } from "../services/conditions.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -1240,6 +1241,58 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return HighlightsService.getHighlightsForMatch(id, hName, aName);
+    }
+  );
+
+  // Condições Climáticas, Gramado e Altitude da Partida (Match Conditions)
+  app.get(
+    "/:id/conditions",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Condições climáticas no estádio, gramado e impacto de altitude",
+        description:
+          "Dados meteorológicos da partida (temperatura, umidade, probabilidade de chuva, vento), tipo de gramado (natural vs sintético), altitude da praça esportiva e laudo físico/aerodinâmico sobre a velocidade da bola e desgaste dos atletas.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+          venueId: matches.venueId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let hName = "Flamengo";
+      let aName = "Palmeiras";
+      let vName = "Maracanã";
+      let city = "Rio de Janeiro";
+
+      if (match) {
+        const [h] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h?.name) hName = h.name;
+        if (a?.name) aName = a.name;
+
+        if (match.venueId) {
+          const [v] = await db.select().from(venues).where(eq(venues.id, match.venueId)).limit(1);
+          if (v) {
+            vName = v.name;
+            city = v.city || "Rio de Janeiro";
+          }
+        }
+      }
+
+      return ConditionsService.getMatchConditions(id, hName, aName, vName, city);
     }
   );
 };

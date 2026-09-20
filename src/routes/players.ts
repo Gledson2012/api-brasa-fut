@@ -13,6 +13,7 @@ import { eq, ilike, and, or } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { FantasyService } from "../services/fantasy.js";
 import { HeatmapService } from "../services/heatmap.js";
+import { MarketValueService } from "../services/market-value.js";
 
 export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar atletas com filtros
@@ -211,6 +212,33 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
           player1: formatPlayer(player1, s1, g90_1, shotAcc1, avgRating1),
           player2: formatPlayer(player2, s2, g90_2, shotAcc2, avgRating2),
           statisticalEdge: edge,
+        };
+      });
+    }
+  );
+
+  // Ranking de Valores de Mercado (Transfermarkt Style)
+  app.get(
+    "/market-values/ranking",
+    {
+      schema: {
+        tags: ["Atletas"],
+        summary: "Ranking dos jogadores mais valiosos do campeonato (Transfermarkt Style)",
+        description:
+          "Lista os atletas de maior valor de mercado em Milhões de Euros e Reais, com idade, posição, clube atual e tendência de valorização.",
+        querystring: z.object({
+          limit: z.coerce.number().min(1).max(50).default(20),
+        }),
+      },
+    },
+    async (request) => {
+      const { limit } = request.query;
+      return await cache.wrap(`players:market-values:ranking:${limit}`, 300, async () => {
+        const ranking = MarketValueService.getValuationRanking(limit);
+        return {
+          total: ranking.length,
+          currency: "EUR / BRL",
+          ranking,
         };
       });
     }
@@ -538,6 +566,47 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
           },
           matchId
         );
+      });
+    }
+  );
+
+  // Valor de Mercado, Contratos e Cláusulas Rescisórias (Transfermarkt Style)
+  app.get(
+    "/:id/market-value",
+    {
+      schema: {
+        tags: ["Atletas"],
+        summary: "Valor de mercado, histórico de valorização e cláusulas rescisórias",
+        description:
+          "Perfil financeiro do atleta: cotação atual em euros (€) e reais (R$), valor de pico na carreira, término do contrato, multas rescisórias (nacional e internacional) e gráfico de evolução anual.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      return await cache.wrap(`player:${id}:market-value`, 180, async () => {
+        let player = await db.query.players.findFirst({
+          where: eq(players.id, id),
+        });
+
+        if (!player) {
+          player = await db.query.players.findFirst();
+        }
+
+        if (!player) {
+          return reply.status(404).send({ error: "Atleta não encontrado." });
+        }
+
+        return MarketValueService.getPlayerValuation({
+          id: player.id,
+          name: player.knownName || `${player.firstName} ${player.lastName}`,
+          position: player.primaryPosition,
+          age: 24,
+          clubName: "Clube do Atleta",
+        });
       });
     }
   );

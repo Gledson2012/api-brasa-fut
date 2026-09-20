@@ -1188,6 +1188,30 @@
         }
       }
     },
+    "/api/v1/competitions/{id}/fair-play": {
+      "get": {
+        "summary": "Tabela oficial de Fair Play e disciplina da liga",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Ranking de disciplina dos clubes com pontos de penalidade calculados (Amarelo = 1 pt, Vermelho Indireto = 3 pts, Vermelho Direto = 5 pts), faltas cometidas e índice de conduta esportiva.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/teams/": {
       "get": {
         "summary": "Listar todos os clubes",
@@ -1708,6 +1732,33 @@
         }
       }
     },
+    "/api/v1/players/market-values/ranking": {
+      "get": {
+        "summary": "Ranking dos jogadores mais valiosos do campeonato (Transfermarkt Style)",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Lista os atletas de maior valor de mercado em Milhões de Euros e Reais, com idade, posição, clube atual e tendência de valorização.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/players/{id}": {
       "get": {
         "summary": "Obter detalhes do atleta",
@@ -1828,6 +1879,30 @@
             "name": "matchId",
             "required": false
           },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/players/{id}/market-value": {
+      "get": {
+        "summary": "Valor de mercado, histórico de valorização e cláusulas rescisórias",
+        "tags": [
+          "Atletas"
+        ],
+        "description": "Perfil financeiro do atleta: cotação atual em euros (€) e reais (R$), valor de pico na carreira, término do contrato, multas rescisórias (nacional e internacional) e gráfico de evolução anual.",
+        "parameters": [
           {
             "schema": {
               "type": "number"
@@ -2545,6 +2620,30 @@
           "Partidas"
         ],
         "description": "Retorna os clipes de gols, defesas, polêmicas e resumo completo da partida com links de reprodução e suporte a iframe embed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/conditions": {
+      "get": {
+        "summary": "Condições climáticas no estádio, gramado e impacto de altitude",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Dados meteorológicos da partida (temperatura, umidade, probabilidade de chuva, vento), tipo de gramado (natural vs sintético), altitude da praça esportiva e laudo físico/aerodinâmico sobre a velocidade da bola e desgaste dos atletas.",
         "parameters": [
           {
             "schema": {
@@ -4077,6 +4176,80 @@
           }
         }
       }
+    },
+    "/api/v1/rankings/power-ranking": {
+      "get": {
+        "summary": "Power Ranking dinâmico dos clubes (Índice Elo, xGD e Momentum)",
+        "tags": [
+          "Rankings & Índices de Força"
+        ],
+        "description": "Avaliação de força contínua dos clubes calculada através de Rating Elo, forma ponderada dos últimos 5 jogos, saldo de gols esperado por 90 min (xGD) e dificuldade de calendário (Strength of Schedule).",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "competitionId",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/guide": {
+      "get": {
+        "summary": "Guia completo de transmissões de futebol do dia (TV & Streaming)",
+        "tags": [
+          "Transmissões & Onde Assistir"
+        ],
+        "description": "Grade agregada de jogos com canais de TV Aberta (Globo), TV Fechada (SporTV, ESPN, Premiere) e Streaming (CazéTV, Prime Video, Disney+, Max), acompanhados de narradores e comentaristas.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "description": "Data da rodada (padrão: hoje)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/today": {
+      "get": {
+        "summary": "Onde assistir futebol hoje na TV e no Streaming",
+        "tags": [
+          "Transmissões & Onde Assistir"
+        ],
+        "description": "Retorna a grade de jogos de hoje com todas as opções de transmissão ao vivo.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -4172,6 +4345,14 @@
     {
       "name": "Vídeos & Melhores Momentos (Highlights)",
       "description": "Feeds de melhores momentos, vídeos em streaming, iframe embeds e restrições geográficas (geoblocking)"
+    },
+    {
+      "name": "Rankings & Índices de Força",
+      "description": "Power Ranking dinâmico dos clubes, Ratings Elo e indicadores de Momentum"
+    },
+    {
+      "name": "Transmissões & Onde Assistir",
+      "description": "Guia completo de transmissões de futebol em TV Aberta, Fechada e Streaming"
     }
   ]
 }
