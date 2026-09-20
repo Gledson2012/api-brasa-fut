@@ -3,21 +3,20 @@ import { db } from "../db/index.js";
 import { apiKeys } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { rateLimiter } from "../services/rateLimiter.js";
+import {
+  getCachedApiKey,
+  setCachedApiKey,
+  type CachedApiKey,
+} from "../services/apiKeyCache.js";
+import { hashApiKey, safeCompare } from "../utils/apiKey.js";
 
-// Cache em memória de API Keys válidas para latência quase zero (TTL de 60s)
-interface CachedKey {
-  id: number;
-  userName: string;
-  email: string;
-  key: string;
-  plan: "FREE" | "PRO" | "ENTERPRISE";
-  rateLimitPerMinute: number;
-  isActive: boolean;
-  cachedAt: number;
-}
+/**
+ * Cache das chaves autenticadas (Redis quando configurado, memória como
+ * fallback). A chave em texto puro nunca é guardada: o índice é o SHA-256.
+ */
+export { invalidateApiKey as invalidateCachedKey } from "../services/apiKeyCache.js";
 
-const keyCache = new Map<string, CachedKey>();
-const CACHE_TTL_MS = 60 * 1000;
+const AUTH_ROUTE_LIMIT_PER_MINUTE = 10;
 
 export async function authAndRateLimitMiddleware(
   request: FastifyRequest,
@@ -32,17 +31,49 @@ export async function authAndRateLimitMiddleware(
     url.startsWith("/api/v1/auth/register") ||
     url.startsWith("/api/v1/auth/login") ||
     url.startsWith("/api/v1/auth/plans") ||
-    url.startsWith("/api/v1/auth/migrate-db") ||
+    url.startsWith("/api/v1/auth/keys/rotate") ||
+    url.startsWith("/api/v1/billing/webhook") ||
+    url.startsWith("/openapi.json") ||
     url.startsWith("/api/v1/live/ws");
 
   if (isPublicRoute) {
+    // Rotas públicas que recebem credenciais ficam sem rate limit por chave,
+    // então aplicamos um limite por IP para dificultar força bruta.
+    const isCredentialRoute =
+      url.startsWith("/api/v1/auth/login") ||
+      url.startsWith("/api/v1/auth/register") ||
+      url.startsWith("/api/v1/auth/keys/rotate");
+
+    if (isCredentialRoute) {
+      const limit = AUTH_ROUTE_LIMIT_PER_MINUTE;
+      const result = await rateLimiter.check(`ip:${request.ip}:${url}`, limit);
+
+      reply.header("X-RateLimit-Limit", result.limit.toString());
+      reply.header("X-RateLimit-Remaining", result.remaining.toString());
+      reply.header("X-RateLimit-Reset", result.resetSeconds.toString());
+
+      if (!result.allowed) {
+        reply.status(429).send({
+          error: "Too Many Requests",
+          message: `Limite de ${limit} tentativas por minuto excedido. Tente novamente em ${result.resetSeconds}s.`,
+        });
+        return;
+      }
+    }
+
     return;
   }
 
-  // Extrair API Key do cabeçalho ou query param
+  // Extrair API Key do cabeçalho (a query string só é aceita se habilitada
+  // explicitamente, pois URLs vazam em logs, proxies e referrers).
   const apiKeyHeader = request.headers["x-api-key"];
-  const queryParam = (request.query as Record<string, string> | undefined)?.api_key;
-  const rawKey = (typeof apiKeyHeader === "string" ? apiKeyHeader : queryParam)?.trim();
+  const queryParam =
+    process.env.ALLOW_API_KEY_QUERY_PARAM === "true"
+      ? (request.query as Record<string, string> | undefined)?.api_key
+      : undefined;
+  const rawKey = (
+    typeof apiKeyHeader === "string" ? apiKeyHeader : queryParam
+  )?.trim();
 
   if (!rawKey) {
     reply.status(401).send({
@@ -54,15 +85,15 @@ export async function authAndRateLimitMiddleware(
     return;
   }
 
-  // Verificar cache local
-  const now = Date.now();
-  let keyRecord = keyCache.get(rawKey);
+  const keyHash = hashApiKey(rawKey);
 
-  if (!keyRecord || now - keyRecord.cachedAt > CACHE_TTL_MS) {
+  let keyRecord: CachedApiKey | null = await getCachedApiKey(keyHash);
+
+  if (!keyRecord) {
     const [dbKey] = await db
       .select()
       .from(apiKeys)
-      .where(eq(apiKeys.key, rawKey));
+      .where(eq(apiKeys.keyHash, keyHash));
 
     if (!dbKey) {
       reply.status(401).send({
@@ -80,16 +111,23 @@ export async function authAndRateLimitMiddleware(
       return;
     }
 
-    keyRecord = {
-      ...dbKey,
-      cachedAt: now,
-    };
-    keyCache.set(rawKey, keyRecord);
+    keyRecord = { ...dbKey, cachedAt: Date.now() };
+    await setCachedApiKey(keyRecord);
+  }
+
+  // Revalidado a cada requisição: desativação vale assim que o cache expira
+  // (ou imediatamente, quando a invalidação é propagada pelo Redis).
+  if (!keyRecord.isActive) {
+    reply.status(403).send({
+      error: "Chave de API Suspensa",
+      message: "Esta chave foi desativada.",
+    });
+    return;
   }
 
   // Validar Rate Limiting
-  const rateLimitResult = rateLimiter.check(
-    keyRecord.key,
+  const rateLimitResult = await rateLimiter.check(
+    keyRecord.keyHash,
     keyRecord.rateLimitPerMinute
   );
 
@@ -131,7 +169,11 @@ export function requireAdminOrPlan(
     return false;
   }
 
-  if (process.env.ADMIN_API_KEY && user.key === process.env.ADMIN_API_KEY) {
+  if (
+    process.env.ADMIN_API_KEY &&
+    user.keyHash &&
+    safeCompare(user.keyHash, hashApiKey(process.env.ADMIN_API_KEY))
+  ) {
     return true;
   }
 

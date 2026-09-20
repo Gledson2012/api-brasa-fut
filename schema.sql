@@ -1,291 +1,448 @@
 -- ============================================================================
--- SCHEMA PARA API DE FUTEBOL (POSTGRESQL)
+-- SCHEMA DA BRASAFUT API (POSTGRESQL)
+-- ============================================================================
+-- ARQUIVO GERADO AUTOMATICAMENTE — NÃO EDITE À MÃO.
+-- Fonte: migrations em ./drizzle (npm run db:generate + npm run db:schema-sql).
 -- ============================================================================
 
--- Extensões úteis (opcional para buscas textuais)
+-- Extensões úteis (busca textual sem acentos)
 CREATE EXTENSION IF NOT EXISTS "unaccent";
 
--- ----------------------------------------------------------------------------
--- 1. TIPOS ENUMERADOS (ENUMs)
--- ----------------------------------------------------------------------------
-CREATE TYPE competition_type AS ENUM ('LEAGUE', 'CUP', 'INTERNATIONAL');
 
-CREATE TYPE match_status AS ENUM (
-    'SCHEDULED', 
-    'FIRST_HALF', 
-    'HALF_TIME', 
-    'SECOND_HALF', 
-    'EXTRA_TIME', 
-    'PENALTIES', 
-    'FINISHED', 
-    'POSTPONED', 
-    'CANCELLED'
+DO $$ BEGIN CREATE TYPE "public"."api_plan" AS ENUM('FREE', 'PRO', 'ENTERPRISE'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN CREATE TYPE "public"."competition_type" AS ENUM('LEAGUE', 'CUP', 'INTERNATIONAL'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN CREATE TYPE "public"."event_type" AS ENUM('GOAL', 'OWN_GOAL', 'PENALTY_SCORED', 'PENALTY_MISSED', 'YELLOW_CARD', 'RED_CARD', 'SECOND_YELLOW', 'SUBSTITUTION'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN CREATE TYPE "public"."match_status" AS ENUM('SCHEDULED', 'FIRST_HALF', 'HALF_TIME', 'SECOND_HALF', 'EXTRA_TIME', 'PENALTIES', 'FINISHED', 'POSTPONED', 'CANCELLED'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'PAID', 'EXPIRED', 'CANCELLED'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN CREATE TYPE "public"."player_position" AS ENUM('GOALKEEPER', 'DEFENDER', 'MIDFIELDER', 'FORWARD'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+CREATE TABLE IF NOT EXISTS "api_keys" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "api_keys_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"user_name" varchar(120) NOT NULL,
+	"email" varchar(150) NOT NULL,
+	"password_hash" varchar(255),
+	"key" varchar(64) NOT NULL,
+	"plan" "api_plan" DEFAULT 'FREE' NOT NULL,
+	"rate_limit_per_minute" integer DEFAULT 10 NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "api_keys_email_unique" UNIQUE("email"),
+	CONSTRAINT "api_keys_key_unique" UNIQUE("key")
 );
 
-CREATE TYPE event_type AS ENUM (
-    'GOAL', 
-    'OWN_GOAL', 
-    'PENALTY_SCORED', 
-    'PENALTY_MISSED', 
-    'YELLOW_CARD', 
-    'RED_CARD', 
-    'SECOND_YELLOW', 
-    'SUBSTITUTION'
+CREATE TABLE IF NOT EXISTS "competitions" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "competitions_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"name" varchar(100) NOT NULL,
+	"code" varchar(20),
+	"country" varchar(100),
+	"type" "competition_type" DEFAULT 'LEAGUE' NOT NULL,
+	"logo_url" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "competitions_code_unique" UNIQUE("code")
 );
 
-CREATE TYPE player_position AS ENUM (
-    'GOALKEEPER', 
-    'DEFENDER', 
-    'MIDFIELDER', 
-    'FORWARD'
+CREATE TABLE IF NOT EXISTS "match_events" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "match_events_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"match_id" bigint NOT NULL,
+	"team_id" bigint NOT NULL,
+	"player_id" bigint NOT NULL,
+	"related_player_id" bigint,
+	"type" "event_type" NOT NULL,
+	"minute" smallint NOT NULL,
+	"extra_minute" smallint DEFAULT 0,
+	"description" text,
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE TYPE api_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
-
--- ----------------------------------------------------------------------------
--- 2. INFRAESTRUTURA BÁSICA (ESTÁDIOS E CLUBES)
--- ----------------------------------------------------------------------------
-
-CREATE TABLE venues (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    city VARCHAR(100) NOT NULL,
-    country VARCHAR(100) NOT NULL,
-    capacity INT CHECK (capacity > 0),
-    surface VARCHAR(50) DEFAULT 'Grass',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "match_lineups" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "match_lineups_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"match_id" bigint NOT NULL,
+	"team_id" bigint NOT NULL,
+	"player_id" bigint NOT NULL,
+	"is_starter" boolean DEFAULT true NOT NULL,
+	"jersey_number" smallint,
+	"formation_position" varchar(10),
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE teams (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    venue_id BIGINT REFERENCES venues(id) ON DELETE SET NULL,
-    name VARCHAR(120) NOT NULL,
-    short_name VARCHAR(60),
-    acronym VARCHAR(10),
-    founded_year INT CHECK (founded_year > 1850),
-    country VARCHAR(100) NOT NULL,
-    logo_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "match_statistics" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "match_statistics_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"match_id" bigint NOT NULL,
+	"team_id" bigint NOT NULL,
+	"possession_pct" smallint,
+	"shots_total" smallint DEFAULT 0,
+	"shots_on_target" smallint DEFAULT 0,
+	"corners" smallint DEFAULT 0,
+	"fouls" smallint DEFAULT 0,
+	"offsides" smallint DEFAULT 0,
+	"yellow_cards" smallint DEFAULT 0,
+	"red_cards" smallint DEFAULT 0,
+	"saves" smallint DEFAULT 0,
+	"passes_total" smallint DEFAULT 0,
+	"passes_accurate" smallint DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 3. COMPETIÇÕES E TEMPORADAS
--- ----------------------------------------------------------------------------
-
-CREATE TABLE competitions (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    code VARCHAR(20) UNIQUE, -- Ex: 'BRA-1', 'UCL', 'PL'
-    country VARCHAR(100),    -- NULL para torneios continentais/mundiais
-    type competition_type NOT NULL DEFAULT 'LEAGUE',
-    logo_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "matches" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "matches_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"season_id" bigint NOT NULL,
+	"venue_id" bigint,
+	"home_team_id" bigint NOT NULL,
+	"away_team_id" bigint NOT NULL,
+	"round" varchar(50),
+	"kickoff_time" timestamp with time zone NOT NULL,
+	"status" "match_status" DEFAULT 'SCHEDULED' NOT NULL,
+	"home_score" smallint DEFAULT 0,
+	"away_score" smallint DEFAULT 0,
+	"home_score_ht" smallint DEFAULT 0,
+	"away_score_ht" smallint DEFAULT 0,
+	"home_score_et" smallint,
+	"away_score_et" smallint,
+	"home_score_penalties" smallint,
+	"away_score_penalties" smallint,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE seasons (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    competition_id BIGINT NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
-    name VARCHAR(50) NOT NULL, -- Ex: '2026' ou '2025/2026'
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    is_current BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_competition_season UNIQUE (competition_id, name)
+CREATE TABLE IF NOT EXISTS "payments" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "payments_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"api_key_id" bigint NOT NULL,
+	"payment_id" varchar(64) NOT NULL,
+	"target_plan" "api_plan" NOT NULL,
+	"amount_cents" integer NOT NULL,
+	"status" "payment_status" DEFAULT 'PENDING' NOT NULL,
+	"pix_qr_code" text NOT NULL,
+	"pix_copy_paste" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"paid_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "payments_payment_id_unique" UNIQUE("payment_id")
 );
 
--- ----------------------------------------------------------------------------
--- 4. ATLETAS E ELENCOS
--- ----------------------------------------------------------------------------
-
-CREATE TABLE players (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    first_name VARCHAR(80) NOT NULL,
-    last_name VARCHAR(80) NOT NULL,
-    known_name VARCHAR(100), -- Ex: 'Vini Jr', 'Pelé'
-    birth_date DATE,
-    nationality VARCHAR(100) NOT NULL,
-    primary_position player_position NOT NULL,
-    height_cm INT,
-    weight_kg INT,
-    photo_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "player_season_statistics" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "player_season_statistics_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"player_id" bigint NOT NULL,
+	"season_id" bigint NOT NULL,
+	"team_id" bigint NOT NULL,
+	"appearances" integer DEFAULT 0 NOT NULL,
+	"matches_started" integer DEFAULT 0 NOT NULL,
+	"minutes_played" integer DEFAULT 0 NOT NULL,
+	"goals" integer DEFAULT 0 NOT NULL,
+	"assists" integer DEFAULT 0 NOT NULL,
+	"yellow_cards" integer DEFAULT 0 NOT NULL,
+	"red_cards" integer DEFAULT 0 NOT NULL,
+	"rating" varchar(10) DEFAULT '0.0',
+	"expected_goals" varchar(10) DEFAULT '0.0',
+	"expected_assists" varchar(10) DEFAULT '0.0',
+	"shots_total" integer DEFAULT 0 NOT NULL,
+	"shots_on_target" integer DEFAULT 0 NOT NULL,
+	"key_passes" integer DEFAULT 0 NOT NULL,
+	"clean_sheets" integer DEFAULT 0 NOT NULL,
+	"saves" integer DEFAULT 0 NOT NULL,
+	"goals_conceded" integer DEFAULT 0 NOT NULL,
+	"penalty_saves" integer DEFAULT 0 NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
--- Relação Time <-> Jogador por Temporada
-CREATE TABLE team_rosters (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-    season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
-    jersey_number SMALLINT CHECK (jersey_number BETWEEN 1 AND 99),
-    position player_position NOT NULL,
-    joined_date DATE,
-    left_date DATE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_team_player_season UNIQUE (team_id, player_id, season_id)
+CREATE TABLE IF NOT EXISTS "players" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "players_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"first_name" varchar(80) NOT NULL,
+	"last_name" varchar(80) NOT NULL,
+	"known_name" varchar(100),
+	"birth_date" date,
+	"nationality" varchar(100) NOT NULL,
+	"primary_position" "player_position" NOT NULL,
+	"height_cm" integer,
+	"weight_kg" integer,
+	"photo_url" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 5. PARTIDAS (FIXTURES)
--- ----------------------------------------------------------------------------
-
-CREATE TABLE matches (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
-    venue_id BIGINT REFERENCES venues(id) ON DELETE SET NULL,
-    home_team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
-    away_team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
-    round VARCHAR(50), -- Ex: 'Rodada 14', 'Quartas de Final - Ida'
-    kickoff_time TIMESTAMPTZ NOT NULL,
-    status match_status NOT NULL DEFAULT 'SCHEDULED',
-    
-    -- Placar no Tempo Normal / Final
-    home_score SMALLINT DEFAULT 0 CHECK (home_score >= 0),
-    away_score SMALLINT DEFAULT 0 CHECK (away_score >= 0),
-    
-    -- Placar no Intervalo (Half-Time)
-    home_score_ht SMALLINT DEFAULT 0 CHECK (home_score_ht >= 0),
-    away_score_ht SMALLINT DEFAULT 0 CHECK (away_score_ht >= 0),
-    
-    -- Placar de Pênaltis (se houver desempate)
-    home_score_et SMALLINT CHECK (home_score_et >= 0),
-    away_score_et SMALLINT CHECK (away_score_et >= 0),
-    home_score_penalties SMALLINT CHECK (home_score_penalties >= 0),
-    away_score_penalties SMALLINT CHECK (away_score_penalties >= 0),
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT chk_different_teams CHECK (home_team_id <> away_team_id)
+CREATE TABLE IF NOT EXISTS "referees" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "referees_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"name" varchar(150) NOT NULL,
+	"nationality" varchar(100) DEFAULT 'Brasil' NOT NULL,
+	"federation" varchar(100) DEFAULT 'CBF / FIFA',
+	"matches_count" integer DEFAULT 0 NOT NULL,
+	"yellow_cards_total" integer DEFAULT 0 NOT NULL,
+	"red_cards_total" integer DEFAULT 0 NOT NULL,
+	"fouls_avg" varchar(10) DEFAULT '27.4',
+	"penalties_total" integer DEFAULT 0 NOT NULL,
+	"home_win_pct" integer DEFAULT 48 NOT NULL,
+	"away_win_pct" integer DEFAULT 26 NOT NULL,
+	"draw_pct" integer DEFAULT 26 NOT NULL,
+	"photo_url" text,
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 6. ESCALAÇÕES E EVENTOS EM TEMPO REAL
--- ----------------------------------------------------------------------------
-
-CREATE TABLE match_lineups (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
-    is_starter BOOLEAN NOT NULL DEFAULT TRUE,
-    jersey_number SMALLINT,
-    formation_position VARCHAR(10), -- Ex: 'GK', 'CB', 'LB', 'CAM', 'ST'
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_match_player UNIQUE (match_id, player_id)
+CREATE TABLE IF NOT EXISTS "seasons" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "seasons_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"competition_id" bigint NOT NULL,
+	"name" varchar(50) NOT NULL,
+	"start_date" date NOT NULL,
+	"end_date" date NOT NULL,
+	"is_current" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE match_events (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
-    related_player_id BIGINT REFERENCES players(id) ON DELETE SET NULL, -- Assistência ou quem sai na substituição
-    type event_type NOT NULL,
-    minute SMALLINT NOT NULL CHECK (minute BETWEEN 1 AND 130),
-    extra_minute SMALLINT DEFAULT 0 CHECK (extra_minute >= 0),
-    description TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "standings" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "standings_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"season_id" bigint NOT NULL,
+	"team_id" bigint NOT NULL,
+	"position" integer NOT NULL,
+	"points" integer DEFAULT 0 NOT NULL,
+	"played" integer DEFAULT 0 NOT NULL,
+	"won" integer DEFAULT 0 NOT NULL,
+	"drawn" integer DEFAULT 0 NOT NULL,
+	"lost" integer DEFAULT 0 NOT NULL,
+	"goals_for" integer DEFAULT 0 NOT NULL,
+	"goals_against" integer DEFAULT 0 NOT NULL,
+	"goal_difference" integer DEFAULT 0 NOT NULL,
+	"form" varchar(10),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 7. TABELA DE CLASSIFICAÇÃO (STANDINGS)
--- ----------------------------------------------------------------------------
-
-CREATE TABLE standings (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
-    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    position INT NOT NULL CHECK (position > 0),
-    points INT NOT NULL DEFAULT 0,
-    played INT NOT NULL DEFAULT 0,
-    won INT NOT NULL DEFAULT 0,
-    drawn INT NOT NULL DEFAULT 0,
-    lost INT NOT NULL DEFAULT 0,
-    goals_for INT NOT NULL DEFAULT 0,
-    goals_against INT NOT NULL DEFAULT 0,
-    goal_difference INT NOT NULL DEFAULT 0,
-    form VARCHAR(10), -- Ex: 'V-E-V-D-V'
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_season_team_standing UNIQUE (season_id, team_id)
+CREATE TABLE IF NOT EXISTS "team_absences" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "team_absences_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"team_id" bigint NOT NULL,
+	"player_id" bigint,
+	"player_name" varchar(150) NOT NULL,
+	"position" varchar(50),
+	"type" varchar(50) NOT NULL,
+	"reason" varchar(255) NOT NULL,
+	"expected_return" varchar(100),
+	"status" varchar(50) DEFAULT 'OUT' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 8. ESTATÍSTICAS DETALHADAS DA PARTIDA
--- ----------------------------------------------------------------------------
-
-CREATE TABLE match_statistics (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-    team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    possession_pct SMALLINT CHECK (possession_pct BETWEEN 0 AND 100),
-    shots_total SMALLINT DEFAULT 0,
-    shots_on_target SMALLINT DEFAULT 0,
-    corners SMALLINT DEFAULT 0,
-    fouls SMALLINT DEFAULT 0,
-    offsides SMALLINT DEFAULT 0,
-    yellow_cards SMALLINT DEFAULT 0,
-    red_cards SMALLINT DEFAULT 0,
-    saves SMALLINT DEFAULT 0,
-    passes_total SMALLINT DEFAULT 0,
-    passes_accurate SMALLINT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_match_team_stats UNIQUE (match_id, team_id)
+CREATE TABLE IF NOT EXISTS "team_rosters" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "team_rosters_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"team_id" bigint NOT NULL,
+	"player_id" bigint NOT NULL,
+	"season_id" bigint NOT NULL,
+	"jersey_number" smallint,
+	"position" "player_position" NOT NULL,
+	"joined_date" date,
+	"left_date" date,
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
--- ----------------------------------------------------------------------------
--- 9. AUTENTICAÇÃO E CONTROLE DE ACESSO (API KEYS)
--- ----------------------------------------------------------------------------
-
-CREATE TABLE api_keys (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_name VARCHAR(120) NOT NULL,
-    email VARCHAR(150) NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
-    key VARCHAR(64) NOT NULL UNIQUE,
-    plan api_plan NOT NULL DEFAULT 'FREE',
-    rate_limit_per_minute INT NOT NULL DEFAULT 10,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "teams" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "teams_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"venue_id" bigint,
+	"name" varchar(120) NOT NULL,
+	"short_name" varchar(60),
+	"acronym" varchar(10),
+	"founded_year" integer,
+	"country" varchar(100) NOT NULL,
+	"logo_url" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE INDEX idx_api_keys_key ON api_keys (key);
-
-CREATE TABLE webhooks (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    api_key_id BIGINT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
-    url VARCHAR(500) NOT NULL,
-    secret VARCHAR(64) NOT NULL,
-    events TEXT[] NOT NULL DEFAULT '{"ALL"}',
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "transfers" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "transfers_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"player_id" bigint,
+	"player_name" varchar(150) NOT NULL,
+	"from_team_id" bigint,
+	"from_team_name" varchar(120) NOT NULL,
+	"to_team_id" bigint,
+	"to_team_name" varchar(120) NOT NULL,
+	"type" varchar(50) DEFAULT 'PERMANENT' NOT NULL,
+	"transfer_date" date NOT NULL,
+	"fee_amount" varchar(50),
+	"market_value" varchar(50),
+	"contract_until" date,
+	"position" varchar(50),
+	"photo_url" text,
+	"created_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE webhook_deliveries (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    webhook_id BIGINT NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
-    event_type VARCHAR(50) NOT NULL,
-    payload JSONB NOT NULL,
-    status_code INT,
-    response_body TEXT,
-    success BOOLEAN NOT NULL DEFAULT FALSE,
-    attempt_count INT NOT NULL DEFAULT 1,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "venues" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "venues_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"name" varchar(150) NOT NULL,
+	"city" varchar(100) NOT NULL,
+	"country" varchar(100) NOT NULL,
+	"capacity" integer,
+	"surface" varchar(50) DEFAULT 'Grass',
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 
-CREATE INDEX idx_webhooks_api_key_id ON webhooks(api_key_id);
-CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
+CREATE TABLE IF NOT EXISTS "webhook_deliveries" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "webhook_deliveries_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"webhook_id" bigint NOT NULL,
+	"event_type" varchar(50) NOT NULL,
+	"payload" jsonb NOT NULL,
+	"status_code" integer,
+	"response_body" text,
+	"success" boolean DEFAULT false NOT NULL,
+	"attempt_count" integer DEFAULT 1 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "webhooks" (
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "webhooks_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"api_key_id" bigint NOT NULL,
+	"url" varchar(500) NOT NULL,
+	"secret" varchar(64) NOT NULL,
+	"events" text[] DEFAULT '{"ALL"}' NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE "match_events" ADD CONSTRAINT "match_events_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "match_events" ADD CONSTRAINT "match_events_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "match_events" ADD CONSTRAINT "match_events_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "match_events" ADD CONSTRAINT "match_events_related_player_id_players_id_fk" FOREIGN KEY ("related_player_id") REFERENCES "public"."players"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "match_lineups" ADD CONSTRAINT "match_lineups_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "match_lineups" ADD CONSTRAINT "match_lineups_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "match_lineups" ADD CONSTRAINT "match_lineups_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "match_statistics" ADD CONSTRAINT "match_statistics_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "match_statistics" ADD CONSTRAINT "match_statistics_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "matches" ADD CONSTRAINT "matches_season_id_seasons_id_fk" FOREIGN KEY ("season_id") REFERENCES "public"."seasons"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "matches" ADD CONSTRAINT "matches_venue_id_venues_id_fk" FOREIGN KEY ("venue_id") REFERENCES "public"."venues"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "matches" ADD CONSTRAINT "matches_home_team_id_teams_id_fk" FOREIGN KEY ("home_team_id") REFERENCES "public"."teams"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "matches" ADD CONSTRAINT "matches_away_team_id_teams_id_fk" FOREIGN KEY ("away_team_id") REFERENCES "public"."teams"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "payments" ADD CONSTRAINT "payments_api_key_id_api_keys_id_fk" FOREIGN KEY ("api_key_id") REFERENCES "public"."api_keys"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "player_season_statistics" ADD CONSTRAINT "player_season_statistics_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "player_season_statistics" ADD CONSTRAINT "player_season_statistics_season_id_seasons_id_fk" FOREIGN KEY ("season_id") REFERENCES "public"."seasons"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "player_season_statistics" ADD CONSTRAINT "player_season_statistics_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "seasons" ADD CONSTRAINT "seasons_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "standings" ADD CONSTRAINT "standings_season_id_seasons_id_fk" FOREIGN KEY ("season_id") REFERENCES "public"."seasons"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "standings" ADD CONSTRAINT "standings_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "team_absences" ADD CONSTRAINT "team_absences_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "team_absences" ADD CONSTRAINT "team_absences_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "team_rosters" ADD CONSTRAINT "team_rosters_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "team_rosters" ADD CONSTRAINT "team_rosters_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "team_rosters" ADD CONSTRAINT "team_rosters_season_id_seasons_id_fk" FOREIGN KEY ("season_id") REFERENCES "public"."seasons"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "teams" ADD CONSTRAINT "teams_venue_id_venues_id_fk" FOREIGN KEY ("venue_id") REFERENCES "public"."venues"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "transfers" ADD CONSTRAINT "transfers_player_id_players_id_fk" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "transfers" ADD CONSTRAINT "transfers_from_team_id_teams_id_fk" FOREIGN KEY ("from_team_id") REFERENCES "public"."teams"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "transfers" ADD CONSTRAINT "transfers_to_team_id_teams_id_fk" FOREIGN KEY ("to_team_id") REFERENCES "public"."teams"("id") ON DELETE set null ON UPDATE no action;
+
+ALTER TABLE "webhook_deliveries" ADD CONSTRAINT "webhook_deliveries_webhook_id_webhooks_id_fk" FOREIGN KEY ("webhook_id") REFERENCES "public"."webhooks"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "webhooks" ADD CONSTRAINT "webhooks_api_key_id_api_keys_id_fk" FOREIGN KEY ("api_key_id") REFERENCES "public"."api_keys"("id") ON DELETE cascade ON UPDATE no action;
+
+CREATE INDEX IF NOT EXISTS "idx_api_keys_key" ON "api_keys" USING btree ("key");
+
+CREATE INDEX IF NOT EXISTS "idx_events_match_minute" ON "match_events" USING btree ("match_id","minute","extra_minute");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_match_player" ON "match_lineups" USING btree ("match_id","player_id");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_match_team_stats" ON "match_statistics" USING btree ("match_id","team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_matches_kickoff_status" ON "matches" USING btree ("kickoff_time","status");
+
+CREATE INDEX IF NOT EXISTS "idx_matches_season_id" ON "matches" USING btree ("season_id");
+
+CREATE INDEX IF NOT EXISTS "idx_matches_teams" ON "matches" USING btree ("home_team_id","away_team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_payments_api_key_id" ON "payments" USING btree ("api_key_id");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_player_season_stat" ON "player_season_statistics" USING btree ("player_id","season_id");
+
+CREATE INDEX IF NOT EXISTS "idx_player_season_goals" ON "player_season_statistics" USING btree ("season_id","goals");
+
+CREATE INDEX IF NOT EXISTS "idx_player_season_assists" ON "player_season_statistics" USING btree ("season_id","assists");
+
+CREATE INDEX IF NOT EXISTS "idx_player_season_clean_sheets" ON "player_season_statistics" USING btree ("season_id","clean_sheets");
+
+CREATE INDEX IF NOT EXISTS "idx_referees_name" ON "referees" USING btree ("name");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_competition_season" ON "seasons" USING btree ("competition_id","name");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_season_team_standing" ON "standings" USING btree ("season_id","team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_standings_season_pos" ON "standings" USING btree ("season_id","position");
+
+CREATE INDEX IF NOT EXISTS "idx_team_absences_team_id" ON "team_absences" USING btree ("team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_team_absences_player_id" ON "team_absences" USING btree ("player_id");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_team_player_season" ON "team_rosters" USING btree ("team_id","player_id","season_id");
+
+CREATE INDEX IF NOT EXISTS "idx_team_rosters_season_team" ON "team_rosters" USING btree ("season_id","team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_transfers_player_id" ON "transfers" USING btree ("player_id");
+
+CREATE INDEX IF NOT EXISTS "idx_transfers_from_team_id" ON "transfers" USING btree ("from_team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_transfers_to_team_id" ON "transfers" USING btree ("to_team_id");
+
+CREATE INDEX IF NOT EXISTS "idx_transfers_date" ON "transfers" USING btree ("transfer_date");
+
+CREATE INDEX IF NOT EXISTS "idx_webhook_deliveries_webhook_id" ON "webhook_deliveries" USING btree ("webhook_id");
+
+CREATE INDEX IF NOT EXISTS "idx_webhooks_api_key_id" ON "webhooks" USING btree ("api_key_id");
+
+-- As chaves de API deixam de ser persistidas em texto puro:
+-- passamos a guardar apenas o SHA-256 (key_hash) e um prefixo de exibição.
+ALTER TABLE "api_keys" ADD COLUMN IF NOT EXISTS "key_hash" varchar(64);
+
+ALTER TABLE "api_keys" ADD COLUMN IF NOT EXISTS "key_prefix" varchar(24);
+
+UPDATE "api_keys"
+   SET "key_hash" = encode(sha256("key"::bytea), 'hex'),
+       "key_prefix" = left("key", 12)
+ WHERE "key_hash" IS NULL;
+
+ALTER TABLE "api_keys" ALTER COLUMN "key_hash" SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS "idx_api_keys_key_hash" ON "api_keys" USING btree ("key_hash");
+
+ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_key_hash_unique" UNIQUE("key_hash");
+
+DROP INDEX IF EXISTS "idx_api_keys_key";
+
+ALTER TABLE "api_keys" DROP CONSTRAINT IF EXISTS "api_keys_key_unique";
+
+ALTER TABLE "api_keys" DROP COLUMN IF EXISTS "key";
+
 
 -- ============================================================================
--- 9. TRIGGERS PARA UPDATED_AT AUTOMÁTICO
+-- FUNÇÃO E TRIGGERS DE UPDATED_AT AUTOMÁTICO
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()
@@ -300,9 +457,9 @@ DO $$
 DECLARE
     t text;
 BEGIN
-    FOR t IN 
-        SELECT table_name 
-        FROM information_schema.columns 
+    FOR t IN
+        SELECT table_name
+        FROM information_schema.columns
         WHERE table_schema = 'public' AND column_name = 'updated_at'
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS trg_set_timestamp_%I ON %I;', t, t);
@@ -311,20 +468,3 @@ BEGIN
 END;
 $$;
 
--- ============================================================================
--- 10. ÍNDICES DE PERFORMANCE (CRUCIAIS PARA APIs)
--- ============================================================================
-
--- Consultas rápidas por data e status (ex: "jogos de hoje" ou "jogos ao vivo")
-CREATE INDEX idx_matches_kickoff_status ON matches (kickoff_time, status);
-CREATE INDEX idx_matches_season_id ON matches (season_id);
-CREATE INDEX idx_matches_teams ON matches (home_team_id, away_team_id);
-
--- Busca de eventos por jogo em tempo de execução
-CREATE INDEX idx_events_match_minute ON match_events (match_id, minute, extra_minute);
-
--- Classificação ordenada por posição
-CREATE INDEX idx_standings_season_pos ON standings (season_id, position ASC);
-
--- Consultas de elenco por time/temporada
-CREATE INDEX idx_team_rosters_season_team ON team_rosters (season_id, team_id);

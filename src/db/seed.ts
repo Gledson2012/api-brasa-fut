@@ -16,6 +16,8 @@ import {
   payments,
 } from "./schema.js";
 import { hashPassword } from "../utils/password.js";
+import { apiKeyPrefix, generateApiKey, hashApiKey } from "../utils/apiKey.js";
+import { randomBytes } from "node:crypto";
 
 export async function seed(closeClient: boolean = true) {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
@@ -209,36 +211,39 @@ export async function seed(closeClient: boolean = true) {
   const { SofascoreSyncService } = await import("../services/sofascoreSync.js");
   await SofascoreSyncService.sync(true);
 
-  console.log("🔑 Inserindo Chaves de API para demonstração...");
-  await db.insert(apiKeys).values([
-    {
-      userName: "enterprise_admin",
-      email: "enterprise@brasafut.com.br",
-      passwordHash: hashPassword("BrasaFut@Enterprise2026"),
-      key: "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45",
-      plan: "ENTERPRISE",
-      rateLimitPerMinute: 1000,
-      isActive: true,
-    },
-    {
-      userName: "Dev Demonstração",
-      email: "dev@brasafut.com.br",
-      passwordHash: hashPassword("DevPro@2026"),
-      key: "bf_live_demo_test_key_123",
-      plan: "PRO",
-      rateLimitPerMinute: 120,
-      isActive: true,
-    },
-    {
-      userName: "Usuário Gratuito",
-      email: "free@brasafut.com.br",
-      passwordHash: hashPassword("FreeUser@2026"),
-      key: "bf_live_free_test_key_456",
-      plan: "FREE",
-      rateLimitPerMinute: 10,
-      isActive: true,
-    },
-  ]);
+  console.log("🔑 Criando a conta administrativa inicial...");
+
+  // Nenhuma credencial é fixada no código: informe via ambiente ou receba
+  // valores aleatórios impressos apenas uma vez.
+  const bootstrapEmail =
+    process.env.BOOTSTRAP_ADMIN_EMAIL || "admin@brasafut.local";
+  const bootstrapUserName = process.env.BOOTSTRAP_ADMIN_USER || "enterprise_admin";
+
+  const generatedPassword = `Bf!${randomBytes(12).toString("base64url")}`;
+  const generatedKey = generateApiKey("ENTERPRISE");
+
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  const bootstrapKey = process.env.BOOTSTRAP_ADMIN_KEY;
+  const adminKey = bootstrapKey || generatedKey;
+
+  await db.insert(apiKeys).values({
+    userName: bootstrapUserName,
+    email: bootstrapEmail,
+    passwordHash: hashPassword(bootstrapPassword || generatedPassword),
+    keyHash: hashApiKey(adminKey),
+    keyPrefix: apiKeyPrefix(adminKey),
+    plan: "ENTERPRISE",
+    rateLimitPerMinute: 1000,
+    isActive: true,
+  });
+
+  console.log(`   ↳ Conta ENTERPRISE criada para ${bootstrapEmail}`);
+  if (!bootstrapPassword) {
+    console.log(`   ↳ Senha gerada (guarde agora, não será exibida novamente): ${generatedPassword}`);
+  }
+  if (!bootstrapKey) {
+    console.log(`   ↳ API Key gerada (guarde agora, não será exibida novamente): ${generatedKey}`);
+  }
 
   console.log("✅ Seed concluído com sucesso!");
   if (closeClient) {

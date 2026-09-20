@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck, schema.sql e lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: schema.sql precisa refletir as migrations
+        run: |
+          npm run db:schema-sql
+          if ! git diff --exit-code -- schema.sql; then
+            echo "::error::schema.sql está desatualizado. Rode 'npm run db:schema-sql' e commite o resultado."
+            exit 1
+          fi
+
+      - name: Lint
+        run: npm run lint --if-present
+
+  database:
+    name: Migrations + testes de integração (branch efêmero no Neon)
+    runs-on: ubuntu-latest
+    needs: quality
+    # Requer a variável de repositório NEON_PROJECT_ID e o secret NEON_API_KEY
+    # (a Neon GitHub Integration cria os dois automaticamente).
+    # Sem eles, o job é ignorado em vez de falhar.
+    if: ${{ vars.NEON_PROJECT_ID != '' }}
+    env:
+      DISABLE_REDIS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --legacy-peer-deps
+
+      - name: Criar branch efêmero no Neon
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: ci-${{ github.ref_name }}-${{ github.run_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Aplicar migrations em banco limpo
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: npm run db:migrate
+
+      - name: Testes de integração
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: npm run test:integration
+
+      - name: Remover branch efêmero
+        if: always()
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ steps.neon.outputs.branch_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+  # Obs.: `npm test` (tests/api.test.ts) é uma suíte de aceitação que precisa de um
+  # banco já populado (seed + sincronização do Sofascore). Para rodá-la na CI,
+  # use um branch criado a partir do branch de desenvolvimento e execute
+  # `npm run db:seed` antes dos testes.

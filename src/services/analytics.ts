@@ -668,25 +668,8 @@ export class AnalyticsService {
     };
   }
 
+  /** Seed inicial de desfalques (schema garantido pelas migrations). */
   private static async ensureAbsencesSeed() {
-    const { client } = await import("../db/index.js");
-    await client.unsafe(`
-      CREATE TABLE IF NOT EXISTS team_absences (
-        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-        player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
-        player_name VARCHAR(150) NOT NULL,
-        position VARCHAR(50),
-        type VARCHAR(50) NOT NULL,
-        reason VARCHAR(255) NOT NULL,
-        expected_return VARCHAR(100),
-        status VARCHAR(50) DEFAULT 'OUT' NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_team_absences_team_id ON team_absences (team_id);
-      CREATE INDEX IF NOT EXISTS idx_team_absences_player_id ON team_absences (player_id);
-    `);
-
     try {
       const [res] = await db.select({ count: sql<number>`count(*)` }).from(teamAbsences);
       if (Number(res?.count) === 0) {

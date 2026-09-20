@@ -4,6 +4,11 @@ import { client, db } from "../src/db/index.js";
 import { apiKeys, teams, players, venues, competitions, seasons, matches, matchEvents, matchStatistics } from "../src/db/schema.js";
 import { eq, ilike } from "drizzle-orm";
 import { hashPassword } from "../src/utils/password.js";
+import {
+  apiKeyPrefix,
+  generateApiKey,
+  hashApiKey,
+} from "../src/utils/apiKey.js";
 import { randomBytes } from "node:crypto";
 
 // Configuração global de testes
@@ -26,7 +31,7 @@ export async function teardownTestApp() {
 
 export async function createTestApiKey(plan: "FREE" | "PRO" | "ENTERPRISE" = "FREE", email?: string): Promise<string> {
   const randomPart = randomBytes(20).toString("hex");
-  const key = `bf_live_${plan.toLowerCase()}_${randomPart}`;
+  const key = generateApiKey(plan);
   const testEmail = email || `system_test_${plan.toLowerCase()}_${randomPart}@brasafut.internal`;
   const passwordHash = hashPassword("testpassword123");
 
@@ -36,7 +41,8 @@ export async function createTestApiKey(plan: "FREE" | "PRO" | "ENTERPRISE" = "FR
     userName: `Test User ${plan}`,
     email: testEmail,
     passwordHash,
-    key,
+    keyHash: hashApiKey(key),
+    keyPrefix: apiKeyPrefix(key),
     plan,
     rateLimitPerMinute: rateLimits[plan],
     isActive: true,

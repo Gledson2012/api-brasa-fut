@@ -102,15 +102,46 @@ describe("API BrasaFut - Testes de Integração", () => {
         })
         .expect(200);
 
+      // A chave não é mais devolvida no login: apenas o prefixo identificador.
       expect(response.body).toMatchObject({
-        message: "Login realizado com sucesso!",
-        apiKey: expect.stringMatching(/^bf_live_/),
+        keyPrefix: expect.stringMatching(/^bf_live/),
         user: expect.objectContaining({
           userName: "Login Test",
           email: "logintest@example.com",
           plan: "FREE",
         }),
       });
+      expect(response.body.message).toContain("Login realizado com sucesso!");
+      expect(response.body.apiKey).toBeUndefined();
+    });
+
+    it("POST /api/v1/auth/keys/rotate - deve emitir nova chave e invalidar a anterior", async () => {
+      const key = await import("../setup.js").then((m) =>
+        m.createTestApiKey("FREE", "rotatetest@example.com")
+      );
+
+      const novoAcesso = await request(app.server)
+        .get("/api/v1/auth/me")
+        .set("x-api-key", key)
+        .expect(200);
+      expect(novoAcesso.body.keyPrefix).toHaveLength(12);
+
+      const response = await request(app.server)
+        .post("/api/v1/auth/keys/rotate")
+        .send({ login: "rotatetest@example.com", password: "testpassword123" })
+        .expect(200);
+
+      expect(response.body.key).toMatch(/^bf_live_[a-f0-9]+$/);
+
+      await request(app.server)
+        .get("/api/v1/auth/me")
+        .set("x-api-key", response.body.key)
+        .expect(200);
+
+      await request(app.server)
+        .get("/api/v1/auth/me")
+        .set("x-api-key", key)
+        .expect(401);
     });
   });
 

@@ -1,9 +1,16 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
 import { apiKeys, payments } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { hashApiKey, safeCompare } from "../utils/apiKey.js";
+import { requireAdminOrPlan } from "../middleware/auth.js";
+
+/** Modo sandbox: habilita simulação de Pix e webhook sem segredo. */
+function pixSandboxEnabled(): boolean {
+  return process.env.ALLOW_PIX_SIMULATION === "true";
+}
 
 export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
   // 1. Criar Cobrança Pix para Upgrade de Plano
@@ -37,11 +44,11 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const { apiKey, targetPlan } = request.body;
 
-      // Buscar API Key
+      // Buscar API Key pelo hash (a chave em texto puro não é armazenada)
       const [keyRecord] = await db
         .select()
         .from(apiKeys)
-        .where(eq(apiKeys.key, apiKey));
+        .where(eq(apiKeys.keyHash, hashApiKey(apiKey)));
 
       if (!keyRecord) {
         return reply.status(404).send({ error: "Chave de API não encontrada" });
@@ -95,16 +102,51 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ["Billing & Monetização Pix"],
-        summary: "Webhook de confirmação de pagamento Pix",
+        summary: "Webhook de confirmação de pagamento Pix (gateway/PSP)",
         description:
-          "Endpoint chamado automaticamente pelo gateway de pagamento (Mercado Pago, Asaas, etc.) quando o Pix é liquidado.",
+          "Endpoint chamado pelo gateway de pagamento quando o Pix é liquidado. Requer o segredo compartilhado no cabeçalho 'x-pix-secret' (PIX_WEBHOOK_SECRET).",
         body: z.object({
           event: z.string().default("PAYMENT_CONFIRMED"),
           paymentId: z.string(),
         }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            paymentId: z.string(),
+            status: z.string(),
+            targetPlan: z.string().optional(),
+            rateLimitPerMinute: z.number().optional(),
+            paidAt: z.string().optional(),
+          }),
+          403: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
       },
     },
     async (request, reply) => {
+      // Confirmação de pagamento só é aceita do gateway (segredo), de um admin
+      // autenticado ou em modo sandbox explícito.
+      const adminSecret = process.env.ADMIN_SECRET;
+      const isAdmin = Boolean(
+        adminSecret && request.headers["x-admin-key"] === adminSecret
+      );
+
+      const pixSecret = process.env.PIX_WEBHOOK_SECRET;
+      const providedSecret = request.headers["x-pix-secret"];
+      const isGateway = Boolean(
+        pixSecret &&
+          typeof providedSecret === "string" &&
+          safeCompare(providedSecret, pixSecret)
+      );
+
+      if (!isAdmin && !isGateway && !pixSandboxEnabled()) {
+        return reply.status(403).send({
+          error:
+            "Webhook não autorizado. Informe o cabeçalho 'x-pix-secret' configurado em PIX_WEBHOOK_SECRET.",
+        });
+      }
+
       const { paymentId } = request.body;
 
       const [payment] = await db
@@ -150,6 +192,7 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
         success: true,
         message: `Pagamento confirmado com sucesso! Chave de API atualizada para o plano ${payment.targetPlan} (${newRateLimit} req/min).`,
         paymentId,
+        status: "PAID",
         targetPlan: payment.targetPlan,
         rateLimitPerMinute: newRateLimit,
         paidAt: new Date().toISOString(),
@@ -157,7 +200,7 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     }
   );
 
-  // 3. Consultar Status do Pagamento
+  // 3. Consultar Status do Pagamento (somente o dono da cobrança)
   app.get(
     "/status/:paymentId",
     {
@@ -171,13 +214,15 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const { paymentId } = request.params;
+      const user = (request as any).apiUser as { id: number } | undefined;
 
       const [payment] = await db
         .select()
         .from(payments)
         .where(eq(payments.paymentId, paymentId));
 
-      if (!payment) {
+      // Cobranças de outras contas respondem 404 para não vazar existência
+      if (!payment || !user || payment.apiKeyId !== user.id) {
         return reply.status(404).send({ error: "Pagamento não encontrado" });
       }
 
@@ -196,7 +241,7 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
         paidAt: payment.paidAt,
         apiKey: keyRecord
           ? {
-              key: keyRecord.key,
+              keyPrefix: keyRecord.keyPrefix,
               userName: keyRecord.userName,
               currentPlan: keyRecord.plan,
               rateLimitPerMinute: keyRecord.rateLimitPerMinute,
@@ -206,21 +251,41 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     }
   );
 
-  // 4. Simular Pagamento Pix (Ambiente de Testes / Sandbox)
+  // 4. Simular Pagamento Pix (Sandbox / Admin)
   app.post(
     "/simulate-pix-paid/:paymentId",
     {
       schema: {
         tags: ["Billing & Monetização Pix"],
-        summary: "Simular confirmação de pagamento Pix (Ambiente de Testes)",
+        summary: "Simular confirmação de pagamento Pix (Sandbox/Admin)",
         description:
-          "Permite testar e aprovar instantaneamente uma cobrança Pix sem precisar movimentar dinheiro real.",
+          "Aprova instantaneamente uma cobrança sem movimentar dinheiro real. Exige privilégio administrativo ou ALLOW_PIX_SIMULATION=true.",
         params: z.object({
           paymentId: z.string(),
         }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            paymentId: z.string(),
+            targetPlan: z.string(),
+            rateLimitPerMinute: z.number(),
+            paidAt: z.string(),
+          }),
+          401: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
       },
     },
     async (request, reply) => {
+      if (
+        !pixSandboxEnabled() &&
+        !requireAdminOrPlan(request, reply, ["ENTERPRISE"])
+      ) {
+        return;
+      }
+
       const { paymentId } = request.params;
 
       const [payment] = await db

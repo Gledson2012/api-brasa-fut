@@ -52,9 +52,22 @@ export function buildApp() {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // CORS
+  // CORS — restrinja com CORS_ORIGINS="https://app.exemplo.com,https://outro.com"
+  const corsOrigins = (process.env.CORS_ORIGINS || "*")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.register(cors, {
-    origin: "*",
+    origin: corsOrigins.includes("*") ? "*" : corsOrigins,
+    credentials: false,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "x-api-key",
+      "x-admin-key",
+      "x-pix-secret",
+    ],
   });
 
   // WebSockets para tempo real (apenas fora do ambiente Serverless da Vercel)
@@ -124,6 +137,11 @@ export function buildApp() {
     },
   });
 
+  // Especificação OpenAPI 3.0 em JSON (mesma fonte do /docs)
+  app.get("/openapi.json", { schema: { hide: true } }, async () =>
+    app.swagger()
+  );
+
   // Rota raiz e status
   app.get("/", async () => {
     return {
@@ -131,6 +149,7 @@ export function buildApp() {
       status: "online",
       version: "1.0.0",
       documentation: "/docs",
+      openapiSpec: "/openapi.json",
       realtimeWebSocket: "/api/v1/live/ws",
       endpoints: {
         authRegister: "POST /api/v1/auth/register",

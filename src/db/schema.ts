@@ -343,14 +343,17 @@ export const apiKeys = pgTable(
     userName: varchar("user_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 150 }).notNull().unique(),
     passwordHash: varchar("password_hash", { length: 255 }),
-    key: varchar("key", { length: 64 }).notNull().unique(),
+    // A chave em texto puro nunca é persistida: guardamos o SHA-256 e um
+    // prefixo (ex.: 'bf_live_ab12') apenas para identificação/exibição.
+    keyHash: varchar("key_hash", { length: 64 }).notNull().unique(),
+    keyPrefix: varchar("key_prefix", { length: 24 }),
     plan: apiPlanEnum("plan").default("FREE").notNull(),
     rateLimitPerMinute: integer("rate_limit_per_minute").default(10).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [index("idx_api_keys_key").on(table.key)]
+  (table) => [index("idx_api_keys_key_hash").on(table.keyHash)]
 );
 
 export const webhooks = pgTable(

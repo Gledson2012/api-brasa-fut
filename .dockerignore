@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.github
+.vercel
+.neon
+.agents
+.husky
+.env
+.env.*
+!.env.example
+*service-account*.json
+google-services.json
+*.log
+*.md

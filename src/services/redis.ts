@@ -1,209 +1,123 @@
-import { Redis } from "ioredis";
-import { cache } from "./cache.js";
+import { Redis, type RedisOptions } from "ioredis";
 
-interface RedisConfig {
-  host: string;
-  port: number;
-  password?: string;
-  db?: number;
-  maxRetriesPerRequest?: number;
-  retryStrategy?: (times: number) => number | null;
-  enableReadyCheck?: boolean;
-  lazyConnect?: boolean;
+/**
+ * Provedor do cliente Redis.
+ *
+ * O Redis é OPCIONAL: quando não configurado (ou indisponível) os consumidores
+ * caem automaticamente para o cache/rate limit em memória do processo.
+ *
+ * Variáveis suportadas:
+ * - REDIS_URL (recomendado, ex.: redis:// ou rediss:// do Upstash/Neon)
+ * - REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / REDIS_DB
+ * - DISABLE_REDIS=true força o modo em memória
+ *
+ * Observação: em ambiente serverless o cache em memória é por instância; para
+ * cache e rate limit compartilhados é necessário o Redis configurado.
+ */
+
+const RETRY_AFTER_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 2_000;
+
+let client: Redis | null = null;
+let connectAttempt: Promise<void> | null = null;
+let unavailableUntil = 0;
+let loggedFailure = false;
+
+interface ResolvedConfig {
+  url?: string;
+  options: RedisOptions;
 }
 
-class RedisCacheService {
-  private client: Redis | null = null;
-  private isConnected = false;
-  private useMemoryFallback = false;
-  private defaultTtlSeconds: number;
+function resolveConfig(): ResolvedConfig | null {
+  if (process.env.DISABLE_REDIS === "true") return null;
 
-  constructor(defaultTtlSeconds: number = 60) {
-    this.defaultTtlSeconds = defaultTtlSeconds;
+  const url =
+    process.env.REDIS_URL ||
+    process.env.REDIS_TLS_URL ||
+    process.env.UPSTASH_REDIS_URL;
+
+  const host = process.env.REDIS_HOST;
+
+  if (!url && !host) return null;
+
+  const options: RedisOptions = {
+    lazyConnect: true,
+    // Falha rápido em vez de enfileirar comandos quando o Redis está fora.
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    connectTimeout: CONNECT_TIMEOUT_MS,
+    enableReadyCheck: true,
+    retryStrategy: () => null,
+  };
+
+  if (url) {
+    return { url, options };
   }
 
-  async connect(config?: RedisConfig): Promise<void> {
-    if (process.env.VERCEL || process.env.DISABLE_REDIS === "true") {
-      console.log("[Redis] Modo serverless detectado - usando cache em memória");
-      this.useMemoryFallback = true;
-      return;
-    }
-
-    const redisConfig: RedisConfig = config || {
-      host: process.env.REDIS_HOST || "localhost",
+  return {
+    options: {
+      ...options,
+      host: host as string,
       port: Number(process.env.REDIS_PORT) || 6379,
-      password: process.env.REDIS_PASSWORD,
+      password: process.env.REDIS_PASSWORD || undefined,
       db: Number(process.env.REDIS_DB) || 0,
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => {
-        if (times > 3) {
-          console.warn("[Redis] Máximo de tentativas atingido - caindo para cache em memória");
-          this.useMemoryFallback = true;
-          return null;
-        }
-        return Math.min(times * 200, 2000);
-      },
-      enableReadyCheck: true,
-      lazyConnect: true,
-    };
+    },
+  };
+}
 
-    try {
-      this.client = new Redis(redisConfig);
-
-      this.client.on("connect", () => {
-        this.isConnected = true;
-        console.log("[Redis] Conectado com sucesso");
-      });
-
-      this.client.on("error", (err: Error) => {
-        console.error("[Redis] Erro:", err.message);
-        this.isConnected = false;
-      });
-
-      this.client.on("close", () => {
-        this.isConnected = false;
-      });
-
-      await this.client.connect();
-      await this.client.ping();
-    } catch (error) {
-      console.warn("[Redis] Falha na conexão - usando cache em memória:", (error as Error).message);
-      this.useMemoryFallback = true;
-      if (this.client) {
-        await this.client.quit().catch(() => {});
-        this.client = null;
-      }
-    }
+function markUnavailable(error?: Error): void {
+  unavailableUntil = Date.now() + RETRY_AFTER_MS;
+  if (client && (client.status === "end" || client.status === "close")) {
+    client = null;
   }
-
-  private async getFromMemory<T>(key: string): Promise<T | null> {
-    return cache.get<T>(key);
-  }
-
-  private async setToMemory<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
-    await cache.set(key, value, ttlSeconds);
-  }
-
-  private async delFromMemory(key: string): Promise<void> {
-    await cache.del(key);
-  }
-
-  async get<T>(key: string): Promise<T | null> {
-    if (this.useMemoryFallback || !this.client || !this.isConnected) {
-      return this.getFromMemory<T>(key);
-    }
-
-    try {
-      const value = await this.client.get(key);
-      if (value === null) return null;
-      return JSON.parse(value) as T;
-    } catch (error) {
-      console.warn("[Redis] Erro no GET, fallback para memória:", (error as Error).message);
-      return this.getFromMemory<T>(key);
-    }
-  }
-
-  async set<T>(key: string, value: T, ttlSeconds: number = this.defaultTtlSeconds): Promise<void> {
-    if (this.useMemoryFallback || !this.client || !this.isConnected) {
-      return this.setToMemory(key, value, ttlSeconds);
-    }
-
-    try {
-      await this.client.setex(key, ttlSeconds, JSON.stringify(value));
-    } catch (error) {
-      console.warn("[Redis] Erro no SET, fallback para memória:", (error as Error).message);
-      await this.setToMemory(key, value, ttlSeconds);
-    }
-  }
-
-  async del(key: string): Promise<void> {
-    if (this.useMemoryFallback || !this.client || !this.isConnected) {
-      return this.delFromMemory(key);
-    }
-
-    try {
-      await this.client.del(key);
-    } catch (error) {
-      console.warn("[Redis] Erro no DEL, fallback para memória:", (error as Error).message);
-      await this.delFromMemory(key);
-    }
-  }
-
-  async delPattern(prefix: string): Promise<void> {
-    if (this.useMemoryFallback || !this.client || !this.isConnected) {
-      return cache.delPattern(prefix);
-    }
-
-    try {
-      let cursor = "0";
-      do {
-        const [newCursor, keys] = await this.client.scan(cursor, "MATCH", `${prefix}*`, "COUNT", 100);
-        cursor = newCursor;
-        if (keys.length > 0) {
-          await this.client.del(...keys);
-        }
-      } while (cursor !== "0");
-    } catch (error) {
-      console.warn("[Redis] Erro no DEL PATTERN, fallback para memória:", (error as Error).message);
-      await cache.delPattern(prefix);
-    }
-  }
-
-  async flush(): Promise<void> {
-    if (this.useMemoryFallback || !this.client || !this.isConnected) {
-      return cache.flush();
-    }
-
-    try {
-      await this.client.flushdb();
-    } catch (error) {
-      console.warn("[Redis] Erro no FLUSH, fallback para memória:", (error as Error).message);
-      await cache.flush();
-    }
-  }
-
-  async wrap<T>(key: string, ttlSeconds: number, producer: () => Promise<T>): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== null && cached !== undefined) {
-      return cached;
-    }
-
-    const fresh = await producer();
-    if (fresh !== null && fresh !== undefined) {
-      await this.set(key, fresh, ttlSeconds);
-    }
-    return fresh;
-  }
-
-  async healthCheck(): Promise<{ status: "healthy" | "degraded" | "down"; latencyMs?: number }> {
-    if (this.useMemoryFallback || !this.client) {
-      return { status: "degraded", latencyMs: 0 };
-    }
-
-    const start = Date.now();
-    try {
-      await this.client.ping();
-      return { status: "healthy", latencyMs: Date.now() - start };
-    } catch {
-      return { status: "down", latencyMs: Date.now() - start };
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    if (this.client) {
-      await this.client.quit();
-      this.client = null;
-      this.isConnected = false;
-    }
-  }
-
-  getClient(): Redis | null {
-    return this.client;
-  }
-
-  isUsingFallback(): boolean {
-    return this.useMemoryFallback;
+  if (error && !loggedFailure) {
+    loggedFailure = true;
+    console.warn(
+      `[Redis] Indisponível (${error.message}). Usando cache em memória até reconectar.`
+    );
   }
 }
 
-export const redisCache = new RedisCacheService(60);
+/**
+ * Retorna um cliente Redis pronto para uso ou `null` quando o Redis não está
+ * configurado/indisponível (nesse caso os serviços usam o fallback em memória).
+ */
+export async function getRedis(): Promise<Redis | null> {
+  const config = resolveConfig();
+  if (!config) return null;
+
+  if (client && client.status === "ready") return client;
+  if (Date.now() < unavailableUntil) return null;
+
+  if (!connectAttempt) {
+    connectAttempt = (async () => {
+      try {
+        if (!client) {
+          client = config.url
+            ? new Redis(config.url, config.options)
+            : new Redis(config.options);
+
+          client.on("error", (error: Error) => markUnavailable(error));
+          client.on("end", () => markUnavailable());
+        }
+
+        if (client.status === "wait") {
+          await client.connect();
+        }
+        await client.ping();
+        loggedFailure = false;
+        console.log("[Redis] Conectado. Cache e rate limit compartilhados ativos.");
+      } catch (error) {
+        markUnavailable(error as Error);
+      } finally {
+        connectAttempt = null;
+      }
+    })();
+  }
+
+  await connectAttempt;
+  return client && client.status === "ready" ? client : null;
+}
+
+/** Exposto para os serviços montarem chaves namespaced. */
+export const REDIS_KEY_PREFIX = process.env.REDIS_KEY_PREFIX || "brasafut:";

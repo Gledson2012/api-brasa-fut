@@ -4,8 +4,15 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const TARGET_URL = process.env.TARGET_URL || "https://api-brasa-fut.vercel.app";
-const API_KEY =
-  process.env.API_KEY || "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
+// Nunca embutir credenciais no código: a chave vem do secret/variável API_KEY.
+const API_KEY: string = process.env.API_KEY ?? "";
+
+if (!API_KEY) {
+  console.error(
+    "❌ Variável API_KEY não definida. Configure o secret API_KEY com uma chave de plano ENTERPRISE/PRO antes de sincronizar."
+  );
+  process.exit(1);
+}
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {

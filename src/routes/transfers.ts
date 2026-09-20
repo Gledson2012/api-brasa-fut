@@ -182,7 +182,7 @@ export const transfersRoutes: FastifyPluginAsyncZod = async (app) => {
       const cacheKey = `transfers:p${page}:l${limit}:t${teamId || 0}:p${playerId || 0}:${type || "all"}:${q || "none"}`;
 
       return await cache.wrap(cacheKey, 60, async () => {
-        // Garantir que a tabela existe caso não tenha sido executada migração
+        // Seed inicial de transferências (schema garantido pelas migrations)
         try {
           const check = await db.select({ total: count() }).from(transfers);
           if (check[0]?.total === 0) {
@@ -228,50 +228,13 @@ export const transfersRoutes: FastifyPluginAsyncZod = async (app) => {
               });
             }
           }
-        } catch {
-          // Se a tabela transfers não existir no banco de dados ainda, criá-la dinamicamente
-          const { client } = await import("../db/index.js");
-          await client.unsafe(`
-            CREATE TABLE IF NOT EXISTS transfers (
-              id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-              player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
-              player_name VARCHAR(150) NOT NULL,
-              from_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
-              from_team_name VARCHAR(120) NOT NULL,
-              to_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
-              to_team_name VARCHAR(120) NOT NULL,
-              type VARCHAR(50) DEFAULT 'PERMANENT' NOT NULL,
-              transfer_date DATE NOT NULL,
-              fee_amount VARCHAR(50),
-              market_value VARCHAR(50),
-              contract_until DATE,
-              position VARCHAR(50),
-              photo_url TEXT,
-              created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_transfers_player_id ON transfers (player_id);
-            CREATE INDEX IF NOT EXISTS idx_transfers_from_team_id ON transfers (from_team_id);
-            CREATE INDEX IF NOT EXISTS idx_transfers_to_team_id ON transfers (to_team_id);
-            CREATE INDEX IF NOT EXISTS idx_transfers_date ON transfers (transfer_date);
-          `);
-
-          for (const item of DEFAULT_TRANSFERS_SEED) {
-            await client.unsafe(
-              `INSERT INTO transfers (player_name, from_team_name, to_team_name, type, transfer_date, fee_amount, market_value, position, photo_url)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-              [
-                item.playerName,
-                item.fromTeamName,
-                item.toTeamName,
-                item.type,
-                item.transferDate,
-                item.feeAmount,
-                item.marketValue,
-                item.position,
-                item.photoUrl,
-              ]
-            );
-          }
+        } catch (error) {
+          // O schema é garantido pelas migrations: falha no seed não deve
+          // derrubar a listagem.
+          console.warn(
+            "[Transfers] Falha no seed inicial de transferências:",
+            (error as Error).message
+          );
         }
 
         // Construção de filtros

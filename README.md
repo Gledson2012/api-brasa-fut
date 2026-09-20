@@ -16,7 +16,34 @@
   - **FREE**: 10 req/min
   - **PRO**: 120 req/min
   - **ENTERPRISE**: 1.000 req/min
-- Suporte a geração automática de chaves, rotação de credenciais e auditoria em `/api/v1/auth`.
+- Suporte a geração automática de chaves e autenticação em `/api/v1/auth`.
+- **Chaves de API são guardadas apenas como hash (SHA-256)** + prefixo de exibição: o valor em
+  texto puro aparece uma única vez, na criação ou na rotação
+  (`POST /api/v1/auth/keys/rotate`, autenticado por login + senha).
+- A chave deve ser enviada **somente** no cabeçalho `x-api-key` (query string desabilitada por
+  padrão; habilite com `ALLOW_API_KEY_QUERY_PARAM=true`).
+- Com `REDIS_URL` configurado, o rate limit é compartilhado entre **todas as instâncias**
+  (sem Redis, o limite é aplicado por processo).
+- Rotas administrativas (`x-admin-key` / `ADMIN_SECRET` ou plano ENTERPRISE): `/api/v1/sync/*,
+  /api/v1/auth/enterprise/register`, `/api/v1/billing/simulate-pix-paid` e os disparos de teste de push.
+- Login/registro/rotação têm limite por IP (10 tentativas/minuto).
+- CORS configurável por `CORS_ORIGINS` (padrão `*`) e webhook de Pix autenticado por
+  `PIX_WEBHOOK_SECRET` (cabeçalho `x-pix-secret`).
+
+### ⚠️ Mudanças de contrato (para consumidores antigos)
+- `POST /api/v1/auth/login` **não devolve mais a chave** (`apiKey`); retorna `keyPrefix` e os dados
+  do plano. Para obter uma chave nova use `POST /api/v1/auth/keys/rotate` (login + senha).
+- A chave de API é aceita apenas no cabeçalho `x-api-key`.
+- `GET /api/v1/billing/status/:paymentId` responde apenas para a conta dona da cobrança.
+- `POST /api/v1/billing/webhook` exige `x-pix-secret` e `POST /api/v1/billing/simulate-pix-paid`
+  exige admin (ou `ALLOW_PIX_SIMULATION=true`).
+
+### 🔐 Rotação de credenciais vazadas
+Chaves antigas que já estiveram versionadas no repositório devem ser rotacionadas:
+```bash
+npm run db:rotate-leaked -- --dry-run   # mostra o que seria feito
+npm run db:rotate-leaked                # rotaciona chave + senha das contas afetadas
+```
 
 ### 👔 3. Central de Treinadores & Comissões Técnicas
 - Catálogo de técnicos de elite (Filipe Luís, Abel Ferreira, Luis Zubeldía, Artur Jorge, Pep Guardiola, Carlo Ancelotti, Dorival Jr).
@@ -95,13 +122,23 @@ npm install --legacy-peer-deps
 Certifique-se de que o PostgreSQL está ativo ou execute via Docker:
 ```bash
 docker compose up -d
-npm run db:push
+npm run db:migrate
 ```
+
+> O schema é versionado por **migrations do Drizzle** (pasta `drizzle/`). Para alterar o schema:
+> edite `src/db/schema.ts`, rode `npm run db:generate` e depois `npm run db:migrate`.
+> O arquivo `schema.sql` é **gerado** dessas migrations (`npm run db:schema-sql`) e serve apenas
+> como bootstrap de banco vazio para o `docker compose`.
 
 ### 3. Popular Banco com Dados Reais (Seed & Sofascore):
 ```bash
 npm run db:seed
 ```
+
+> O seed cria a conta ENTERPRISE inicial do ambiente usando `BOOTSTRAP_ADMIN_EMAIL` e,
+> opcionalmente, `BOOTSTRAP_ADMIN_PASSWORD` / `BOOTSTRAP_ADMIN_KEY`. Sem essas variáveis,
+> uma senha e uma API key aleatórias são impressas **uma única vez** no console. Nenhuma
+> credencial fica fixa no código.
 
 ### 4. Executar a Suíte de Testes (80+ testes):
 ```bash
@@ -204,6 +241,23 @@ npm run dev
 - `GET /api/v1/competitions/:id/fair-play` - Tabela de disciplina da liga com pontos de penalidade calculados por cartões amarelos, vermelhos e faltas.
 
 ---
+
+## 🤖 Integração Contínua (GitHub Actions)
+
+O workflow `.github/workflows/ci.yml` roda a cada push/PR:
+
+| Job | O que valida |
+|---|---|
+| **quality** | `tsc --noEmit`, lint e se o `schema.sql` está em sincronia com as migrations (`npm run db:schema-sql` + `git diff`) |
+| **database** | Cria um **branch efêmero no Neon**, aplica `npm run db:migrate` em banco limpo e roda os testes de integração; o branch é apagado ao final (mesmo em falha) |
+
+O job `database` é ignorado enquanto `NEON_PROJECT_ID` (variável de repositório) não existir.
+Para habilitá-lo, instale a **Neon GitHub Integration** (cria o secret `NEON_API_KEY` e a variável
+`NEON_PROJECT_ID` automaticamente) ou configure ambos manualmente em *Settings → Secrets and variables → Actions*.
+
+> `npm test` (a suíte de aceitação em `tests/api.test.ts`) roda contra um banco **populado** —
+> ela não é executada na CI para não depender de scraping do Sofascore. Para rodá-la, aponte
+> `DATABASE_URL` para um branch criado a partir do branch de desenvolvimento e rode `npm run db:seed`.
 
 ## 📜 Licença
 MIT

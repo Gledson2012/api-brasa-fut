@@ -1,18 +1,90 @@
 import { test, describe, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { buildApp } from "../src/app.js";
-import { client } from "../src/db/index.js";
+import { client, db } from "../src/db/index.js";
+import { apiKeys } from "../src/db/schema.js";
+import { hashPassword } from "../src/utils/password.js";
+import { apiKeyPrefix, hashApiKey } from "../src/utils/apiKey.js";
+import { eq, inArray } from "drizzle-orm";
 
 describe("BrasaFut API - Testes de Integração e Melhorias", () => {
   let app: ReturnType<typeof buildApp>;
-  const DEMO_KEY = "bf_live_demo_test_key_123";
+
+  // Credenciais criadas em runtime: nenhuma chave ou senha fica fixa no código.
+  let DEMO_KEY: string;
+  let FREE_KEY: string;
+  let FREE_ONLY_KEY: string;
+  let ENTERPRISE_KEY: string;
+  const ENTERPRISE_EMAIL = `enterprise_test_${randomBytes(6).toString("hex")}@brasafut.internal`;
+  const ENTERPRISE_PASSWORD = `Pwd!${randomBytes(9).toString("base64url")}`;
 
   before(async () => {
     app = buildApp();
     await app.ready();
+
+    const suffix = randomBytes(10).toString("hex");
+    DEMO_KEY = `bf_live_demo_${suffix}`;
+    FREE_KEY = `bf_live_free_${suffix}`;
+    FREE_ONLY_KEY = `bf_live_freeonly_${suffix}`;
+    ENTERPRISE_KEY = `bf_live_enterprise_${suffix}`;
+
+    await db.insert(apiKeys).values([
+      {
+        userName: `Test Demo ${suffix}`,
+        email: `demo_${suffix}@brasafut.internal`,
+        passwordHash: hashPassword("testpassword123"),
+        keyHash: hashApiKey(DEMO_KEY),
+        keyPrefix: apiKeyPrefix(DEMO_KEY),
+        plan: "ENTERPRISE",
+        rateLimitPerMinute: 1000,
+        isActive: true,
+      },
+      {
+        userName: `Test Free ${suffix}`,
+        email: `free_${suffix}@brasafut.internal`,
+        passwordHash: hashPassword("testpassword123"),
+        keyHash: hashApiKey(FREE_KEY),
+        keyPrefix: apiKeyPrefix(FREE_KEY),
+        plan: "FREE",
+        rateLimitPerMinute: 10,
+        isActive: true,
+      },
+      {
+        userName: `Test Free Only ${suffix}`,
+        email: `freeonly_${suffix}@brasafut.internal`,
+        passwordHash: hashPassword("testpassword123"),
+        keyHash: hashApiKey(FREE_ONLY_KEY),
+        keyPrefix: apiKeyPrefix(FREE_ONLY_KEY),
+        plan: "FREE",
+        rateLimitPerMinute: 10,
+        isActive: true,
+      },
+      {
+        userName: `Test Enterprise ${suffix}`,
+        email: ENTERPRISE_EMAIL,
+        passwordHash: hashPassword(ENTERPRISE_PASSWORD),
+        keyHash: hashApiKey(ENTERPRISE_KEY),
+        keyPrefix: apiKeyPrefix(ENTERPRISE_KEY),
+        plan: "ENTERPRISE",
+        rateLimitPerMinute: 1000,
+        isActive: true,
+      },
+    ]);
   });
 
   after(async () => {
+    await db
+      .delete(apiKeys)
+      .where(
+        inArray(apiKeys.keyHash, [
+          hashApiKey(DEMO_KEY),
+          hashApiKey(FREE_KEY),
+          hashApiKey(FREE_ONLY_KEY),
+          hashApiKey(ENTERPRISE_KEY),
+        ])
+      )
+      .catch(() => {});
     await app.close();
     await client.end();
   });
@@ -123,7 +195,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       url: "/api/v1/billing/checkout",
       headers: { "x-api-key": DEMO_KEY },
       payload: {
-        apiKey: "bf_live_free_test_key_456",
+        apiKey: FREE_KEY,
         targetPlan: "PRO",
       },
     });
@@ -144,11 +216,11 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.equal(simData.success, true);
     assert.equal(simData.rateLimitPerMinute, 60);
 
-    // 3. Status atualizado
+    // 3. Status atualizado (somente a conta dona da cobrança)
     const statusRes = await app.inject({
       method: "GET",
       url: `/api/v1/billing/status/${checkoutData.paymentId}`,
-      headers: { "x-api-key": DEMO_KEY },
+      headers: { "x-api-key": FREE_KEY },
     });
     assert.equal(statusRes.statusCode, 200);
     const statusData = JSON.parse(statusRes.payload);
@@ -162,14 +234,17 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       method: "POST",
       url: "/api/v1/auth/login",
       payload: {
-        login: "enterprise@brasafut.com.br",
-        password: "BrasaFut@Enterprise2026",
+        login: ENTERPRISE_EMAIL,
+        password: ENTERPRISE_PASSWORD,
       },
     });
     assert.equal(loginRes.statusCode, 200);
     const body = JSON.parse(loginRes.payload);
-    assert.equal(body.message, "Login realizado com sucesso!");
-    assert.ok(body.apiKey.startsWith("bf_live_enterprise_"));
+    assert.ok(body.message.startsWith("Login realizado com sucesso!"));
+    // A chave não é mais devolvida no login: apenas o prefixo de identificação.
+    assert.equal(body.apiKey, undefined);
+    assert.equal(body.keyPrefix.length, 12);
+    assert.ok(body.keyPrefix.startsWith("bf_live"));
     assert.equal(body.user.plan, "ENTERPRISE");
     assert.equal(body.user.rateLimitPerMinute, 1000);
   });
@@ -179,7 +254,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       method: "POST",
       url: "/api/v1/auth/login",
       payload: {
-        login: "enterprise@brasafut.com.br",
+        login: ENTERPRISE_EMAIL,
         password: "SenhaErrada123",
       },
     });
@@ -188,11 +263,53 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(body.error.includes("Credenciais inválidas"));
   });
 
+  test("9b. Rotação de chave emite nova chave e invalida a anterior", async () => {
+    const rotateRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/keys/rotate",
+      payload: {
+        login: ENTERPRISE_EMAIL,
+        password: ENTERPRISE_PASSWORD,
+      },
+    });
+    assert.equal(rotateRes.statusCode, 200);
+    const rotated = JSON.parse(rotateRes.payload);
+    assert.ok(rotated.key.startsWith("bf_live_enterprise_"));
+    assert.equal(rotated.keyPrefix.length, 12);
+
+    // A nova chave autentica normalmente
+    const comNovaChave = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": rotated.key },
+    });
+    assert.equal(comNovaChave.statusCode, 200);
+    assert.equal(JSON.parse(comNovaChave.payload).keyPrefix, rotated.keyPrefix);
+
+    // A chave anterior deixa de existir
+    const comChaveAntiga = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": ENTERPRISE_KEY },
+    });
+    assert.equal(comChaveAntiga.statusCode, 401);
+
+    // Senha errada não permite rotação
+    const senhaErrada = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/keys/rotate",
+      payload: { login: ENTERPRISE_EMAIL, password: "SenhaErrada123" },
+    });
+    assert.equal(senhaErrada.statusCode, 401);
+
+    ENTERPRISE_KEY = rotated.key;
+  });
+
   test("10. Acesso com chave Enterprise retorna perfil correto em /api/v1/auth/me", async () => {
     const meRes = await app.inject({
       method: "GET",
       url: "/api/v1/auth/me",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      headers: { "x-api-key": ENTERPRISE_KEY },
     });
     assert.equal(meRes.statusCode, 200);
     const body = JSON.parse(meRes.payload);
@@ -204,7 +321,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     const pushRes = await app.inject({
       method: "POST",
       url: "/api/v1/live/test-fcm-goal",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      headers: { "x-api-key": ENTERPRISE_KEY },
       payload: {
         teamId: 1957,
         teamName: "Corinthians",
@@ -241,7 +358,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/v1/sync/push",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      headers: { "x-api-key": ENTERPRISE_KEY },
       payload: {
         competitionCode: "PL",
         currentRound: 4,
@@ -1503,6 +1620,123 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     const leader = body.fairPlayTable[0];
     assert.equal(leader.rank, 1);
     assert.ok(typeof leader.penaltyPoints === "number");
+  });
+
+  test("65. Rotas administrativas recusam chave FREE (403)", async () => {
+    const rotasAdministrativas: Array<[string, string]> = [
+      ["GET", "/api/v1/sync/fix-logos"],
+      ["GET", "/api/v1/sync/debug"],
+      ["POST", "/api/v1/live/test-fcm-topic"],
+      ["POST", "/api/v1/live/test-fcm-goal"],
+      ["POST", "/api/v1/auth/enterprise/register"],
+      ["POST", "/api/v1/billing/simulate-pix-paid/pay_inexistente"],
+    ];
+
+    for (const [method, url] of rotasAdministrativas) {
+      const res = await app.inject({
+        method: method as "GET" | "POST",
+        url,
+        headers: { "x-api-key": FREE_ONLY_KEY },
+        payload:
+          method === "POST"
+            ? { userName: "Invasor", email: "invasor@teste.local", password: "senha123" }
+            : undefined,
+      });
+      assert.equal(res.statusCode, 403, `${method} ${url} deveria responder 403`);
+    }
+
+    // Nada foi criado indevidamente
+    const tentativas = await db
+      .select({ id: apiKeys.id })
+      .from(apiKeys)
+      .where(eq(apiKeys.email, "invasor@teste.local"));
+    assert.equal(tentativas.length, 0);
+  });
+
+  test("66. Endpoints administrativos recusam chave sem autenticação (401) e chave inválida", async () => {
+    const semChave = await app.inject({ method: "GET", url: "/api/v1/sync/fix-logos" });
+    assert.equal(semChave.statusCode, 401);
+
+    const chaveInvalida = await app.inject({
+      method: "GET",
+      url: "/api/v1/competitions",
+      headers: { "x-api-key": "bf_live_chave_que_nao_existe" },
+    });
+    assert.equal(chaveInvalida.statusCode, 401);
+  });
+
+  test("67. API key via query string é recusada (401)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/competitions?api_key=${DEMO_KEY}`,
+    });
+    assert.equal(res.statusCode, 401);
+  });
+
+  test("68. Webhook de Pix exige segredo do gateway e confirma o pagamento", async () => {
+    // Cobrança criada para a chave FREE
+    const checkout = await app.inject({
+      method: "POST",
+      url: "/api/v1/billing/checkout",
+      headers: { "x-api-key": DEMO_KEY },
+      payload: { apiKey: FREE_KEY, targetPlan: "PRO" },
+    });
+    assert.equal(checkout.statusCode, 200);
+    const { paymentId } = JSON.parse(checkout.payload);
+
+    // Sem segredo / com segredo errado → 403
+    const semSegredo = await app.inject({
+      method: "POST",
+      url: "/api/v1/billing/webhook",
+      payload: { paymentId },
+    });
+    assert.equal(semSegredo.statusCode, 403);
+
+    const segredoErrado = await app.inject({
+      method: "POST",
+      url: "/api/v1/billing/webhook",
+      headers: { "x-pix-secret": "segredo-errado" },
+      payload: { paymentId },
+    });
+    assert.equal(segredoErrado.statusCode, 403);
+
+    // Com o segredo correto → confirma e sobe o plano
+    const segredoAnterior = process.env.PIX_WEBHOOK_SECRET;
+    process.env.PIX_WEBHOOK_SECRET = "segredo-de-teste-pix";
+    try {
+      const confirmado = await app.inject({
+        method: "POST",
+        url: "/api/v1/billing/webhook",
+        headers: { "x-pix-secret": "segredo-de-teste-pix" },
+        payload: { paymentId },
+      });
+      assert.equal(confirmado.statusCode, 200);
+      const body = JSON.parse(confirmado.payload);
+      assert.equal(body.success, true);
+      assert.equal(body.targetPlan, "PRO");
+    } finally {
+      if (segredoAnterior === undefined) delete process.env.PIX_WEBHOOK_SECRET;
+      else process.env.PIX_WEBHOOK_SECRET = segredoAnterior;
+    }
+
+    // A cobrança pertence à conta FREE: outra conta não consegue consultá-la
+    const deOutraConta = await app.inject({
+      method: "GET",
+      url: `/api/v1/billing/status/${paymentId}`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(deOutraConta.statusCode, 404);
+
+    const doDono = await app.inject({
+      method: "GET",
+      url: `/api/v1/billing/status/${paymentId}`,
+      headers: { "x-api-key": FREE_KEY },
+    });
+    assert.equal(doDono.statusCode, 200);
+    const status = JSON.parse(doDono.payload);
+    assert.equal(status.status, "PAID");
+    assert.equal(status.apiKey.keyPrefix, apiKeyPrefix(FREE_KEY));
+    assert.equal(status.apiKey.key, undefined);
   });
 });
 
