@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "db:init-cloud": "tsx src/db/init-cloud.ts",
     "sync:sofascore": "tsx scripts/sync-sofascore.ts",
     "openapi:export": "tsx scripts/export-openapi.ts",
     "test": "vitest run",
