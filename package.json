@@ -61,6 +61,8 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@neon/config": "^1.7.2",
+    "@neon/env": "^1.4.3",
     "@types/node": "^22.20.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^2.0.0",
