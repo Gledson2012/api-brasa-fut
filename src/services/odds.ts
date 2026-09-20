@@ -260,4 +260,104 @@ export class OddsService {
 
     return valueBets.sort((a, b) => b.expectedValuePct - a.expectedValuePct);
   }
+
+  /**
+   * Catálogo oficial de casas de apostas monitoradas pela API
+   */
+  public static getBookmakers(): Array<{
+    id: number;
+    name: string;
+    key: string;
+    country: string;
+    averagePayoutPct: number;
+    marketsSupported: string[];
+    tier: "TIER_1_SHARP" | "TIER_1_RECREATIONAL" | "TIER_2";
+    regulatedInBrazil: boolean;
+    websiteUrl: string;
+  }> {
+    return [
+      {
+        id: 1,
+        name: "Bet365",
+        key: "bet365",
+        country: "GB",
+        averagePayoutPct: 95.5,
+        marketsSupported: ["1X2", "OVER_UNDER", "BTTS", "ASIAN_HANDICAP", "CORNERS", "CARDS"],
+        tier: "TIER_1_RECREATIONAL",
+        regulatedInBrazil: true,
+        websiteUrl: "https://www.bet365.com",
+      },
+      {
+        id: 2,
+        name: "Betano",
+        key: "betano",
+        country: "GR",
+        averagePayoutPct: 96.2,
+        marketsSupported: ["1X2", "OVER_UNDER", "BTTS", "DOUBLE_CHANCE", "PLAYER_PROPS"],
+        tier: "TIER_1_RECREATIONAL",
+        regulatedInBrazil: true,
+        websiteUrl: "https://br.betano.com",
+      },
+      {
+        id: 3,
+        name: "Betfair",
+        key: "betfair",
+        country: "GB",
+        averagePayoutPct: 97.5,
+        marketsSupported: ["EXCHANGE_BACK_LAY", "1X2", "OVER_UNDER", "BTTS", "ASIAN_HANDICAP"],
+        tier: "TIER_1_SHARP",
+        regulatedInBrazil: true,
+        websiteUrl: "https://www.betfair.com",
+      },
+      {
+        id: 4,
+        name: "Pinnacle",
+        key: "pinnacle",
+        country: "CW",
+        averagePayoutPct: 98.4,
+        marketsSupported: ["1X2", "ASIAN_HANDICAP", "OVER_UNDER"],
+        tier: "TIER_1_SHARP",
+        regulatedInBrazil: false,
+        websiteUrl: "https://www.pinnacle.com",
+      },
+      {
+        id: 5,
+        name: "KTO",
+        key: "kto",
+        country: "MT",
+        averagePayoutPct: 94.8,
+        marketsSupported: ["1X2", "OVER_UNDER", "BTTS", "COMBO"],
+        tier: "TIER_2",
+        regulatedInBrazil: true,
+        websiteUrl: "https://www.kto.com",
+      },
+      {
+        id: 6,
+        name: "Sportingbet",
+        key: "sportingbet",
+        country: "GB",
+        averagePayoutPct: 94.6,
+        marketsSupported: ["1X2", "OVER_UNDER", "BTTS", "SPECIALS"],
+        tier: "TIER_2",
+        regulatedInBrazil: true,
+        websiteUrl: "https://www.sportingbet.com",
+      },
+      {
+        id: 7,
+        name: "Stake",
+        key: "stake",
+        country: "CW",
+        averagePayoutPct: 96.4,
+        marketsSupported: ["1X2", "OVER_UNDER", "BTTS", "ASIAN_HANDICAP", "CRYPTO"],
+        tier: "TIER_1_RECREATIONAL",
+        regulatedInBrazil: false,
+        websiteUrl: "https://stake.com",
+      },
+    ];
+  }
+
+  public static getBookmakerById(id: number) {
+    const list = this.getBookmakers();
+    return list.find((b) => b.id === id) || null;
+  }
 }

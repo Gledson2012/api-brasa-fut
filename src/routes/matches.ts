@@ -25,6 +25,8 @@ import { TacticsService } from "../services/tactics.js";
 import { KitsService } from "../services/kits.js";
 import { VarService } from "../services/var.js";
 import { PenaltiesService } from "../services/penalties.js";
+import { BoxScoreService } from "../services/boxscore.js";
+import { HighlightsService } from "../services/highlights.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -1156,6 +1158,88 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return PenaltiesService.getMatchPenaltyShootout(id, hName, aName);
+    }
+  );
+
+  // Box Score Individual de Jogadores (estilo Opta / NBA)
+  app.get(
+    "/:id/box-score",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Scout completo de atuação individual por jogador (Box Score)",
+        description:
+          "Relatório detalhado de desempenho por atleta: minutos jogados, nota Sofascore/Opta (0-10), passes certos, desarmes, finalizações, xG, assistências e eleição do MVP da partida.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let homeTeam = { id: 1, name: "Flamengo" };
+      let awayTeam = { id: 2, name: "Palmeiras" };
+
+      if (match) {
+        const [h] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h) homeTeam = { id: h.id, name: h.shortName || h.name };
+        if (a) awayTeam = { id: a.id, name: a.shortName || a.name };
+      }
+
+      return BoxScoreService.getMatchBoxScore(id, homeTeam, awayTeam);
+    }
+  );
+
+  // Vídeos e Melhores Momentos da Partida
+  app.get(
+    "/:id/highlights",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Vídeos e melhores momentos da partida",
+        description:
+          "Retorna os clipes de gols, defesas, polêmicas e resumo completo da partida com links de reprodução e suporte a iframe embed.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let hName = "Flamengo";
+      let aName = "Palmeiras";
+
+      if (match) {
+        const [h] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h?.name) hName = h.name;
+        if (a?.name) aName = a.name;
+      }
+
+      return HighlightsService.getHighlightsForMatch(id, hName, aName);
     }
   );
 };

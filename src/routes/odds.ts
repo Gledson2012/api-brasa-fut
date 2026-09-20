@@ -126,4 +126,48 @@ export const oddsRoutes: FastifyPluginAsyncZod = async (app) => {
       });
     }
   );
+
+  // Listar Casas de Apostas (Bookmakers) Suportadas
+  app.get(
+    "/bookmakers",
+    {
+      schema: {
+        tags: ["Apostas & Odds (Mercados Esportivos)"],
+        summary: "Listar casas de apostas monitoradas e payouts médios",
+        description:
+          "Retorna o diretório de bookmakers acompanhados de sua classificação (Sharp vs Recreativa), mercados suportados, país de origem e status regulatório no Brasil.",
+      },
+    },
+    async () => {
+      return cache.wrap("odds:bookmakers:all", 3600, async () => {
+        const bookmakers = OddsService.getBookmakers();
+        return {
+          total: bookmakers.length,
+          bookmakers,
+        };
+      });
+    }
+  );
+
+  // Detalhes de um Bookmaker específico
+  app.get(
+    "/bookmakers/:id",
+    {
+      schema: {
+        tags: ["Apostas & Odds (Mercados Esportivos)"],
+        summary: "Obter detalhes de uma casa de apostas específica",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const bm = OddsService.getBookmakerById(id);
+      if (!bm) {
+        return reply.status(404).send({ error: "Casa de apostas não encontrada." });
+      }
+      return bm;
+    }
+  );
 };

@@ -170,6 +170,21 @@ npm run dev
 - `GET /api/v1/standings/supercomputer` - Projeções probabilísticas Monte Carlo de título e rebaixamento.
 - `POST /api/v1/standings/simulate` - Simulador de resultados futuros.
 
+### 🎥 Vídeos, Melhores Momentos & Geo-Restrictions
+- `GET /api/v1/highlights` - Feed global de clipes e melhores momentos com filtros por país (`countryCode`) e categoria.
+- `GET /api/v1/highlights/:id` - Detalhes do clipe, link MP4 de streaming e URL para embed em `<iframe>`.
+- `GET /api/v1/highlights/:id/geo-restrictions` - Verificação de direitos territoriais e regras de geoblocking (whitelist/blacklist de países ISO-2).
+- `GET /api/v1/matches/:id/highlights` - Todos os vídeos e melhores momentos vinculados a um jogo específico.
+
+### 📊 Scouts Individuais & Box Score (Opta / NBA Style)
+- `GET /api/v1/matches/:id/box-score` - Desempenho individual completo de cada atleta em campo: notas (0-10), passes certos/totais, desarmes, finalizações, xG, duelos ganhos e MVP da partida.
+
+### 🎲 Mercados de Apostas, Value Bets & Bookmakers
+- `GET /api/v1/odds/matches/:matchId` - Cotações completas de 1X2, Over/Under, BTTS e Dupla Chance com Fair Odds.
+- `GET /api/v1/odds/value-bets` - Radar de apostas com valor esperado positivo (EV+).
+- `GET /api/v1/odds/bookmakers` - Diretório oficial de casas de apostas parceiras (Bet365, Betano, Betfair, Pinnacle, Stake, etc.), taxas médias de payout e status regulatório.
+- `GET /api/v1/odds/bookmakers/:id` - Detalhes de um bookmaker específico.
+
 ---
 
 ## 📜 Licença

@@ -1290,7 +1290,102 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(Array.isArray(awardsBody.idealStartingEleven.eleven));
     assert.equal(awardsBody.idealStartingEleven.eleven.length, 11);
   });
+
+  test("55. Feeds de Vídeos, Highlights e Geo-Restrictions (/highlights e /highlights/:id/geo-restrictions)", async () => {
+    // Feed de highlights com filtro de país
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/highlights?countryCode=BR",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.total > 0);
+    assert.equal(body.filters.appliedCountry, "BR");
+    assert.ok(Array.isArray(body.data));
+    const first = body.data[0];
+    assert.ok(first.videoUrl);
+    assert.ok(first.embedUrl);
+    assert.ok(first.geoRestrictions);
+    assert.ok(Array.isArray(first.keyMoments));
+
+    // Consulta de Geo-Restrictions
+    const geoRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/highlights/${first.id}/geo-restrictions`,
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(geoRes.statusCode, 200);
+    const geoBody = JSON.parse(geoRes.payload);
+    assert.equal(geoBody.highlightId, first.id);
+    assert.ok(["NO_RESTRICTIONS", "ALLOWED_COUNTRIES", "BLOCKED_COUNTRIES"].includes(geoBody.state));
+    assert.equal(typeof geoBody.embeddable, "boolean");
+  });
+
+  test("56. Melhores Momentos Vinculados à Partida (/matches/:id/highlights)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/highlights",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(Array.isArray(body));
+    assert.ok(body.length > 0);
+    assert.equal(body[0].matchId, 1);
+    assert.ok(body[0].embedUrl);
+  });
+
+  test("57. Scout Individual de Atuação / Match Box Score (/matches/:id/box-score)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/box-score",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, 1);
+    assert.ok(body.homeTeam);
+    assert.ok(body.awayTeam);
+    assert.ok(Array.isArray(body.homeTeam.players));
+    assert.ok(Array.isArray(body.awayTeam.players));
+    assert.ok(body.mvp);
+    assert.ok(body.mvp.playerName);
+    assert.ok(body.mvp.rating >= 8.0);
+
+    const starter = body.homeTeam.players[0];
+    assert.ok(starter.name);
+    assert.ok(typeof starter.rating === "number");
+    assert.ok(starter.statistics);
+    assert.ok(typeof starter.statistics.passesTotal === "number");
+    assert.ok(typeof starter.statistics.tackles === "number");
+  });
+
+  test("58. Catálogo de Bookmakers / Casas de Apostas (/odds/bookmakers e /odds/bookmakers/:id)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/odds/bookmakers",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.total >= 5);
+    assert.ok(Array.isArray(body.bookmakers));
+
+    // Detalhe de um bookmaker
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/odds/bookmakers/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(detailRes.statusCode, 200);
+    const detail = JSON.parse(detailRes.payload);
+    assert.equal(detail.id, 1);
+    assert.equal(detail.name, "Bet365");
+    assert.ok(detail.averagePayoutPct > 90);
+  });
 });
+
 
 
 

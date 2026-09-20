@@ -2514,6 +2514,54 @@
         }
       }
     },
+    "/api/v1/matches/{id}/box-score": {
+      "get": {
+        "summary": "Scout completo de atuação individual por jogador (Box Score)",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Relatório detalhado de desempenho por atleta: minutos jogados, nota Sofascore/Opta (0-10), passes certos, desarmes, finalizações, xG, assistências e eleição do MVP da partida.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/highlights": {
+      "get": {
+        "summary": "Vídeos e melhores momentos da partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna os clipes de gols, defesas, polêmicas e resumo completo da partida com links de reprodução e suporte a iframe embed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/standings/live": {
       "get": {
         "summary": "Obter tabela de classificação virtual em tempo real (Live Standings)",
@@ -3383,6 +3431,43 @@
         }
       }
     },
+    "/api/v1/odds/bookmakers": {
+      "get": {
+        "summary": "Listar casas de apostas monitoradas e payouts médios",
+        "tags": [
+          "Apostas & Odds (Mercados Esportivos)"
+        ],
+        "description": "Retorna o diretório de bookmakers acompanhados de sua classificação (Sharp vs Recreativa), mercados suportados, país de origem e status regulatório no Brasil.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/odds/bookmakers/{id}": {
+      "get": {
+        "summary": "Obter detalhes de uma casa de apostas específica",
+        "tags": [
+          "Apostas & Odds (Mercados Esportivos)"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/finances/teams/{teamId}": {
       "get": {
         "summary": "Perfil financeiro, folha salarial e conformidade com o Fair Play",
@@ -3869,6 +3954,129 @@
           }
         }
       }
+    },
+    "/api/v1/highlights/": {
+      "get": {
+        "summary": "Feed global de vídeos e melhores momentos de partidas",
+        "tags": [
+          "Vídeos & Melhores Momentos (Highlights)"
+        ],
+        "description": "Retorna galeria de vídeos oficiais, clipes de gols e jogadas capitais, com URLs de streaming (MP4), embeds de player (`<iframe>`) e metadados de geoblocking.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2
+            },
+            "in": "query",
+            "name": "countryCode",
+            "required": false,
+            "description": "Código ISO do país do cliente (ex: BR, PT, US) para filtrar restrições geográficas de transmissão"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FULL_HIGHLIGHTS",
+                "GOAL",
+                "KEY_PLAYS",
+                "TACTICAL_SUMMARY"
+              ]
+            },
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "description": "Filtrar por tipo de conteúdo de vídeo"
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/highlights/{id}": {
+      "get": {
+        "summary": "Obter clipe de vídeo específico por ID",
+        "tags": [
+          "Vídeos & Melhores Momentos (Highlights)"
+        ],
+        "description": "Retorna link direto de reprodução, URL para embed em sites/apps, momentos capitais com timestamp em segundos e detalhes do canal de transmissão.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/highlights/{id}/geo-restrictions": {
+      "get": {
+        "summary": "Consultar travas geográficas e direitos territoriais de um vídeo",
+        "tags": [
+          "Vídeos & Melhores Momentos (Highlights)"
+        ],
+        "description": "Informa se o vídeo possui transmissão liberada globalmente, whitelist de países permitidos ou blacklist de países bloqueados, além da permissão para embedding via iframe.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/highlights/matches/{matchId}": {
+      "get": {
+        "summary": "Obter highlights vinculados a uma partida",
+        "tags": [
+          "Vídeos & Melhores Momentos (Highlights)"
+        ],
+        "description": "Busca todos os vídeos, gols recortados e lances polêmicos do VAR relacionados a uma partida específica.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "matchId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -3960,6 +4168,10 @@
     {
       "name": "Premiações & Hall da Fama",
       "description": "Bola de Ouro, Craque da Temporada, Golden Boy Revelação e Seleção do Ano"
+    },
+    {
+      "name": "Vídeos & Melhores Momentos (Highlights)",
+      "description": "Feeds de melhores momentos, vídeos em streaming, iframe embeds e restrições geográficas (geoblocking)"
     }
   ]
 }

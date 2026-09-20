@@ -37,6 +37,7 @@ import { varRoutes } from "./routes/var.js";
 import { penaltiesRoutes } from "./routes/penalties.js";
 import { attendanceRoutes } from "./routes/attendance.js";
 import { awardsRoutes } from "./routes/awards.js";
+import { highlightsRoutes } from "./routes/highlights.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -90,6 +91,7 @@ export function buildApp() {
         { name: "Pênaltis & Especialistas", description: "Scouts de cobranças, melhores batedores, pegadores de pênaltis e disputas" },
         { name: "Público & Bilheteria dos Estádios", description: "Médias de público pagante, taxa de ocupação das arenas e renda bruta acumulada" },
         { name: "Premiações & Hall da Fama", description: "Bola de Ouro, Craque da Temporada, Golden Boy Revelação e Seleção do Ano" },
+        { name: "Vídeos & Melhores Momentos (Highlights)", description: "Feeds de melhores momentos, vídeos em streaming, iframe embeds e restrições geográficas (geoblocking)" },
       ],
       components: {
         securitySchemes: {
@@ -191,6 +193,11 @@ export function buildApp() {
         attendanceCompetition: "/api/v1/attendance/competitions/:id",
         attendanceVenue: "/api/v1/attendance/venues/:id",
         awardsSeason: "/api/v1/awards/season?competitionId=1",
+        highlights: "/api/v1/highlights?countryCode=BR",
+        highlightGeoRestrictions: "/api/v1/highlights/:id/geo-restrictions",
+        matchHighlights: "/api/v1/matches/:id/highlights",
+        matchBoxScore: "/api/v1/matches/:id/box-score",
+        oddsBookmakers: "/api/v1/odds/bookmakers",
       },
     };
   });
@@ -225,6 +232,7 @@ export function buildApp() {
   app.register(penaltiesRoutes, { prefix: "/api/v1/penalties" });
   app.register(attendanceRoutes, { prefix: "/api/v1/attendance" });
   app.register(awardsRoutes, { prefix: "/api/v1/awards" });
+  app.register(highlightsRoutes, { prefix: "/api/v1/highlights" });
 
   return app;
 }
