@@ -1,27 +1,69 @@
-# ⚽ BrasaFut API
+# ⚽ BrasaFut API - Documentação Oficial
 
-> API profissional e de alta performance de futebol brasileiro e internacional, desenvolvida em **Node.js**, **TypeScript**, **Fastify**, **Drizzle ORM**, **PostgreSQL** e **WebSockets**.
+> **API Profissional de Futebol Brasileiro e Internacional de Alta Performance**, desenvolvida com **Node.js**, **TypeScript**, **Fastify**, **Drizzle ORM**, **PostgreSQL**, **Redis** e **WebSockets**.
+> Projetada para desenvolvedores, emissoras de TV, casas de análise esportiva, fantasy games (estilo Cartola) e aplicativos móveis de alto tráfego.
 
 ---
 
-## 🚀 Funcionalidades Principais
+## 🚀 Funcionalidades Profissionais da API
 
-- **Documentação Interativa Swagger/OpenAPI**: Navegação e testes de todos os endpoints via `/docs`, com botão nativo **Authorize** para testar com sua API Key.
-- **Sistema de API Keys & Rate Limiting**: Proteção de endpoints inspirada em plataformas como RapidAPI e Football-Data.org:
-  - Plano **FREE**: 10 req/min
-  - Plano **PRO**: 120 req/min
-  - Plano **ENTERPRISE**: 1.000 req/min
-  - Cabeçalhos RFC padrão: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
-- **Transmissões e Eventos em Tempo Real (WebSockets)**: Canal de streaming para placares em tempo real e lances de jogos (`ws://localhost:3333/api/v1/live/ws`).
-- **Módulo de Estatísticas Avançadas**: Posse de bola, finalizações certas/totais, faltas, escanteios, cartões e histórico de confronto direto (H2H).
-- **Cobertura de Dados Completa**:
-  - Competições e Temporadas (Série A, Copas, Internacionais)
-  - Clubes e Estádios (Capacidade, gramado, localização)
-  - Atletas e Elencos por temporada
-  - Partidas com placares detalhados (Tempo normal, Intervalo, Prorrogação, Pênaltis)
-  - Linha do tempo de lances (Gols, Cartões, Substituições, VAR)
-  - Tabelas de Classificação (Standings com pontos, saldo de gols e histórico de forma recente `V-E-D`)
-- **Dados Iniciais (Seed)**: Elencos reais e clássicos do Brasileirão 2026 pré-populados.
+### 🧭 1. Documentação Interativa OpenAPI 3.0 & Swagger UI
+- Interface interativa completa em `/docs` com botão nativo **Authorize** para teste das chaves de API.
+- Especificação JSON exportável em `/openapi.json`.
+
+### 🔑 2. Sistema de API Keys & Rate Limiting de Produção
+- Planos configuráveis com rate limit por minuto e cabeçalhos RFC (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`):
+  - **FREE**: 10 req/min
+  - **PRO**: 120 req/min
+  - **ENTERPRISE**: 1.000 req/min
+- Suporte a geração automática de chaves, rotação de credenciais e auditoria em `/api/v1/auth`.
+
+### 👔 3. Central de Treinadores & Comissões Técnicas
+- Catálogo de técnicos de elite (Filipe Luís, Abel Ferreira, Luis Zubeldía, Artur Jorge, Pep Guardiola, Carlo Ancelotti, Dorival Jr).
+- DNA tático individual, esquemas táticos favoritos (`4-3-3`, `4-2-3-1`, `3-4-2-1`), intensidade de pressão e foco de posse.
+- Linha do tempo da carreira de clubes, títulos conquistados e ranking por taxa de vitória e pontos por jogo (PPM).
+
+### ⚔️ 4. Grandes Clássicos & Dérbis Históricos
+- Dossiê detalhado das maiores rivalidades mundiais e brasileiras:
+  - **Dérbi Paulista** (Palmeiras x Corinthians)
+  - **Fla-Flu** (Flamengo x Fluminense)
+  - **Gre-Nal** (Grêmio x Internacional)
+  - **Clássico Mineiro** (Atlético-MG x Cruzeiro)
+  - **El Clásico** (Real Madrid x Barcelona)
+- Retrospecto histórico completo (vitórias, empates, gols marcados), maiores goleadas de cada lado, maiores artilheiros do confronto e histórico recente.
+
+### 🖥️ 5. Central do VAR & Auditoria de Arbitragem
+- Auditoria lance a lance de revisões do árbitro de vídeo: minuto, recomendação da cabine, decisão de campo, tempo de checagem em segundos e transcrição de áudio do diálogo entre o árbitro e a cabine.
+- **Tabela do VAR Líquido**: Impacto real das decisões de arbitragem de vídeo no campeonato (saldo líquido de decisões favoráveis vs desfavoráveis, gols dados/anulados e estimativa de pontos ganhos/perdidos).
+
+### 📋 6. Prancheta Tática 2D & Coordenadas no Gramado
+- Escalações oficiais com coordenadas normalizadas (x: 0–100, y: 0–100) para renderização gráfica de campinhos em apps web e mobile.
+- Papéis táticos avançados para cada atleta (ex: *Lateral Invertido*, *Zagueiro Construtor*, *Pitbull Marcador*, *Regista*, *Ponta Invertido*, *Falso 9*).
+- **DNA Tático do Clube**: Índice PPDA de pressão alta, posse média, canais preferenciais de ataque (flanco esquerdo, centro, flanco direito).
+
+### 🥅 7. Central de Pênaltis & Goleiros Pegadores
+- Ranking oficial de cobradores: taxa de conversão (%), batedores sob pressão aos 85'+ e cantos prediletos no gol.
+- Ranking de goleiros pegadores: percentual de defesas, histórico de pênaltis defendidos e disputas de pênaltis vencidas.
+- Disputa de pênaltis minuto a minuto em partidas eliminatórias (`/api/v1/penalties/matches/:id/shootout`).
+
+### 🏟️ 8. Público, Bilheteria & Taxa de Ocupação das Arenas
+- Ranking de torcidas na competição: média de público pagante, taxa de ocupação dos estádios (%), renda bruta acumulada (R$) e ticket médio do ingresso.
+- Registro histórico e público recorde de cada praça esportiva (Maracanã, MorumBIS, Neo Química Arena, Allianz Parque, Mineirão, etc.).
+
+### 👕 9. Catálogo de Uniformes & Paleta de Cores (Kits)
+- Cores oficiais em código hexadecimal (`#RRGGBB`) de camisas, calções, meiões e números para kit principal (Home), reserva (Away), terceiro (Third) e goleiro (Goalkeeper).
+- Seletor inteligente de uniformes para partidas (`/api/v1/matches/:id/kits`) garantindo contraste ideal.
+
+### 🏆 10. Premiações Oficiais & Hall da Fama
+- Corrida pela **Bola de Ouro / Craque do Brasileirão**, **Golden Boy (Revelação)**, **Luva de Ouro (Melhor Goleiro)**, **Melhor Técnico** e a **Seleção Ideal da Temporada**.
+
+### 🎲 11. Supercomputador Monte Carlo & Simulador de Tabela
+- Simulação de 10.000 cenários probabilísticos para probabilidades matemáticas de Título, G-4 (Libertadores), Sul-Americana e Z-4 (Rebaixamento).
+- Simulador interativo onde o usuário envia palpites de rodadas futuras e obtém a tabela recalculada instantaneamente.
+
+### 📻 12. Guia de Transmissão & Narração Lance a Lance
+- Guia oficial de transmissão: TV Aberta (Globo), TV Fechada (SporTV), PPV (Premiere) e Streaming (CazéTV / Globoplay) com escala de narradores e repórteres de campo.
+- Feed de narração textual minuto a minuto com filtro para lances capitais.
 
 ---
 
@@ -30,91 +72,103 @@
 | Tecnologia | Finalidade |
 |---|---|
 | **Node.js (v20+)** | Runtime JavaScript moderno com suporte nativo a ESM |
-| **Fastify** | Framework HTTP de baixíssimo overhead e alta escalabilidade |
-| **Drizzle ORM** | Type-safe SQL ORM com excelente performance |
-| **PostgreSQL 16** | Banco de dados relacional robusto com extensões de busca (`unaccent`) |
-| **Zod & fastify-type-provider-zod** | Validação estrita de contratos de entrada e saída |
+| **Fastify (v5)** | Framework HTTP de baixíssimo overhead e alta performance |
+| **Drizzle ORM** | Type-safe SQL ORM com tipagem completa em TypeScript |
+| **PostgreSQL 16** | Banco relacional com extensões de normalização textual (`unaccent`) |
+| **Zod** | Validação estrita e inferência de tipos em tempo de compilação |
 | **Fastify Swagger & Swagger UI** | Geração automática da especificação OpenAPI 3.0 |
-| **WebSockets (`@fastify/websocket`)** | Disparo de eventos e placares ao vivo |
-| **Docker & Docker Compose** | Inicialização instantânea do banco de dados e ambiente |
+| **WebSockets (`@fastify/websocket`)** | Canal bidirecional de eventos e placares ao vivo |
+| **Vitest** | Suite de testes automatizados com cobertura completa de integração |
 
 ---
 
-## 📋 Pré-requisitos
+## ⚡ Guia Rápido de Instalação e Execução
 
-- [Docker & Docker Compose](https://www.docker.com/)
-- [Node.js](https://nodejs.org/) (v20 ou superior)
-
----
-
-## ⚡ Guia Rápido de Instalação
-
-### 1. Clonar e instalar dependências:
+### 1. Clonar e Instalar:
 ```bash
 git clone <url-do-repositorio>
 cd api-brasa-fut
-npm install
+npm install --legacy-peer-deps
 ```
 
-### 2. Iniciar o banco de dados PostgreSQL via Docker:
+### 2. Configurar o Banco de Dados PostgreSQL:
+Certifique-se de que o PostgreSQL está ativo ou execute via Docker:
 ```bash
 docker compose up -d
+npm run db:push
 ```
 
-### 3. Popular o banco com dados reais (Seed):
+### 3. Popular Banco com Dados Reais (Seed & Sofascore):
 ```bash
 npm run db:seed
 ```
 
-### 4. Iniciar o servidor em modo de desenvolvimento:
+### 4. Executar a Suíte de Testes (80+ testes):
+```bash
+npm test
+```
+
+### 5. Iniciar o Servidor:
 ```bash
 npm run dev
 ```
 
-A API estará disponível em:
 - **API Base**: `http://localhost:3333`
-- **Documentação Swagger UI**: `http://localhost:3333/docs`
-- **WebSocket em Tempo Real**: `ws://localhost:3333/api/v1/live/ws`
+- **Documentação Swagger**: `http://localhost:3333/docs`
+- **Streaming WebSockets**: `ws://localhost:3333/api/v1/live/ws`
 
 ---
 
-## 📡 Endpoints da API
+## 📡 Catálogo Completo de Endpoints
 
-### 🏆 Competições & Temporadas
-- `GET /api/v1/competitions` - Lista competições cadastradas.
-- `GET /api/v1/competitions/:id` - Detalhes da competição.
-- `GET /api/v1/competitions/:id/seasons` - Temporadas de uma competição.
+### 👔 Treinadores & Comissões Técnicas
+- `GET /api/v1/coaches` - Listagem de técnicos com filtros por nacionalidade, clube e status.
+- `GET /api/v1/coaches/:id` - Perfil detalhado, DNA tático e histórico.
+- `GET /api/v1/coaches/:id/career` - Linha do tempo de passagens por clubes e títulos.
+- `GET /api/v1/coaches/ranking?sortBy=winRate` - Ranking de técnicos por taxa de vitórias, títulos ou PPM.
 
-### 🛡️ Clubes & Estádios
-- `GET /api/v1/teams` - Lista clubes (filtros: `search`, `country`).
-- `GET /api/v1/teams/:id` - Detalhes do clube e seu estádio mandante.
-- `GET /api/v1/teams/:id/roster?seasonId=1` - Elenco do time na temporada.
-- `GET /api/v1/venues` - Lista estádios cadastrados.
-- `GET /api/v1/venues/:id` - Detalhes de um estádio.
+### ⚔️ Grandes Clássicos & Dérbis
+- `GET /api/v1/derbies` - Catálogo das maiores rivalidades e clássicos mundiais.
+- `GET /api/v1/derbies/:slug` - Retrospecto completo, maiores goleadas e artilheiros (ex: `derbi-paulista`, `fla-flu`, `grenal`, `el-clasico`).
 
-### 👤 Atletas
-- `GET /api/v1/players` - Busca paginada de jogadores (filtros: `search`, `position`, `nationality`).
-- `GET /api/v1/players/:id` - Perfil detalhado do jogador e clubes por onde passou.
+### 🖥️ Central do VAR & Arbitragem
+- `GET /api/v1/var/matches/:id` - Auditoria e lances revisados pelo VAR na partida com áudio.
+- `GET /api/v1/var/competitions/:id/table` - Tabela do VAR Líquido do campeonato.
 
-### ⚽ Partidas & Estatísticas
-- `GET /api/v1/matches` - Lista partidas (filtros: `date=YYYY-MM-DD`, `status`, `live=true`, `seasonId`, `round`).
-- `GET /api/v1/matches/live` - Atalho para partidas em andamento em tempo real.
-- `GET /api/v1/matches/:id` - Detalhes completos da partida.
-- `GET /api/v1/matches/:id/events` - Linha do tempo dos lances do jogo (gols, cartões, substituições).
-- `GET /api/v1/matches/:id/statistics` - Estatísticas avançadas (posse, finalizações, faltas, escanteios).
-- `GET /api/v1/matches/:id/h2h` - Histórico de confronto direto (Head-to-Head) entre os clubes.
+### 🥅 Pênaltis & Especialistas
+- `GET /api/v1/penalties/takers` - Ranking dos melhores cobradores e zonas de finalização.
+- `GET /api/v1/penalties/goalkeepers` - Ranking de goleiros com maior índice de defesas de pênalti.
+- `GET /api/v1/penalties/matches/:id/shootout` - Disputa de pênaltis cobrança a cobrança pós-jogo.
 
-### 📈 Tabela de Classificação
-- `GET /api/v1/standings?seasonId=1` - Tabela de classificação com pontos, vitórias, saldo de gols e forma recente.
+### 🏟️ Público & Bilheteria dos Estádios
+- `GET /api/v1/attendance/competitions/:id` - Ranking de torcidas, taxas de ocupação e rendas brutas (R$).
+- `GET /api/v1/attendance/venues/:id` - Recordes históricos e médias de público do estádio.
 
-### ⚡ Tempo Real & WebSockets
-- `ws://localhost:3333/api/v1/live/ws` - Conexão WebSocket para receber transmissões.
-  - Para se inscrever em um jogo específico:
-    ```json
-    { "action": "subscribe", "channel": "match:1" }
-    ```
-- `POST /api/v1/matches/:id/events` - (Admin/Feed) Insere um novo lance e envia broadcast automático para o WebSocket.
-- `PATCH /api/v1/matches/:id/score` - (Admin/Feed) Atualiza placar/status e envia broadcast para o WebSocket.
+### 👕 Uniformes & Cores de Jogo (Kits)
+- `GET /api/v1/teams/:id/kits` - Paleta oficial de cores em hexadecimal para kits Home, Away, Third e Goleiro.
+- `GET /api/v1/matches/:id/kits` - Combinação de uniformes selecionada para a partida.
+
+### 📋 Prancheta Tática & DNA de Jogo
+- `GET /api/v1/matches/:id/tactical-lineup` - 11 titulares com coordenadas 2D (x, y) de 0 a 100 no gramado.
+- `GET /api/v1/teams/:id/tactical-dna` - Filosofia de jogo, índice PPDA de pressão alta e distribuição de ataque.
+
+### 🏆 Premiações da Temporada
+- `GET /api/v1/awards/season?competitionId=1` - Corrida pela Bola de Ouro, Golden Boy, Luva de Ouro e Seleção do Ano.
+
+### ⚽ Partidas & Transmissão
+- `GET /api/v1/matches` - Listagem de partidas com filtros de data, rodada e liga.
+- `GET /api/v1/matches/live` - Partidas em andamento com placares em tempo real.
+- `GET /api/v1/matches/:id/broadcast` - Guia de canais de TV e streaming da partida.
+- `GET /api/v1/matches/:id/commentary` - Feed de narração textual lance a lance minuto a minuto.
+- `GET /api/v1/matches/:id/predictions` - Probabilidades de vitória (Home, Draw, Away) e placares prováveis.
+- `GET /api/v1/matches/:id/momentum` - Gráfico de pressão ofensiva minuto a minuto.
+- `GET /api/v1/matches/:id/shot-map` - Mapa de finalizações no campo com cálculo de Expected Goals (xG).
+
+### 📈 Tabela & Supercomputador
+- `GET /api/v1/standings` - Tabela de classificação oficial.
+- `GET /api/v1/standings/live` - Tabela virtual recalculada em tempo real com os jogos ao vivo.
+- `GET /api/v1/standings/supercomputer` - Projeções probabilísticas Monte Carlo de título e rebaixamento.
+- `POST /api/v1/standings/simulate` - Simulador de resultados futuros.
 
 ---
 

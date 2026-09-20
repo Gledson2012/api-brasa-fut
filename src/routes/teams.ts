@@ -5,6 +5,8 @@ import { teams, teamRosters, players, venues, seasons, matches, competitions, st
 import { eq, ilike, and, or, desc, asc } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { AnalyticsService } from "../services/analytics.js";
+import { TacticsService } from "../services/tactics.js";
+import { KitsService } from "../services/kits.js";
 
 export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar times com filtros
@@ -799,6 +801,76 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         totalInjured: report.length,
         medicalReport: report,
       };
+    }
+  );
+
+  // Identidade e DNA Tático do Clube
+  app.get(
+    "/:id/tactical-dna",
+    {
+      schema: {
+        tags: ["Clubes"],
+        summary: "DNA e filosofia tática do clube (Posse, Pressão Alta e Padrões de Ataque)",
+        description:
+          "Analisa o estilo de jogo da equipe na temporada: formação padrão, percentual médio de posse, intensidade de pressão (PPDA), velocidade de transição e distribuição de jogadas pelos corredores.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const [team] = await db
+        .select({
+          id: teams.id,
+          name: teams.name,
+          shortName: teams.shortName,
+        })
+        .from(teams)
+        .where(eq(teams.id, id))
+        .limit(1);
+
+      if (!team) {
+        return reply.status(404).send({ error: `Clube com ID ${id} não encontrado.` });
+      }
+
+      return TacticsService.getTeamTacticalDna(team.id, team.shortName || team.name);
+    }
+  );
+
+  // Uniformes e Paleta de Cores do Clube
+  app.get(
+    "/:id/kits",
+    {
+      schema: {
+        tags: ["Clubes"],
+        summary: "Catálogo de uniformes oficiais e paleta de cores (Home, Away, Third, Goleiro)",
+        description:
+          "Fornece os códigos hexadecimais oficiais de camisa, calção, meião e numeração de todos os uniformes do clube para renderização visual em interfaces.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const [team] = await db
+        .select({
+          id: teams.id,
+          name: teams.name,
+          shortName: teams.shortName,
+        })
+        .from(teams)
+        .where(eq(teams.id, id))
+        .limit(1);
+
+      if (!team) {
+        return reply.status(404).send({ error: `Clube com ID ${id} não encontrado.` });
+      }
+
+      return KitsService.getTeamKits(team.id, team.shortName || team.name);
     }
   );
 };

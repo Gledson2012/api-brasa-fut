@@ -64,6 +64,10 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
       return {
         page,
         limit,
+        pagination: {
+          page,
+          limit,
+        },
         data: results,
       };
     }

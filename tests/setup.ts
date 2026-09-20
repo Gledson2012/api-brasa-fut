@@ -1,8 +1,8 @@
 import { beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import { client, db } from "../src/db/index.js";
-import { apiKeys, teams, players, venues, competitions, seasons, matches } from "../src/db/schema.js";
-import { eq } from "drizzle-orm";
+import { apiKeys, teams, players, venues, competitions, seasons, matches, matchEvents, matchStatistics } from "../src/db/schema.js";
+import { eq, ilike } from "drizzle-orm";
 import { hashPassword } from "../src/utils/password.js";
 import { randomBytes } from "node:crypto";
 
@@ -27,7 +27,7 @@ export async function teardownTestApp() {
 export async function createTestApiKey(plan: "FREE" | "PRO" | "ENTERPRISE" = "FREE", email?: string): Promise<string> {
   const randomPart = randomBytes(20).toString("hex");
   const key = `bf_live_${plan.toLowerCase()}_${randomPart}`;
-  const testEmail = email || `test_${plan.toLowerCase()}_${randomPart}@example.com`;
+  const testEmail = email || `system_test_${plan.toLowerCase()}_${randomPart}@brasafut.internal`;
   const passwordHash = hashPassword("testpassword123");
 
   const rateLimits = { FREE: 10, PRO: 120, ENTERPRISE: 1000 };
@@ -45,10 +45,58 @@ export async function createTestApiKey(plan: "FREE" | "PRO" | "ENTERPRISE" = "FR
   return key;
 }
 
+let currentTestData: {
+  matchId?: number;
+  player1Id?: number;
+  player2Id?: number;
+  seasonId?: number;
+  competitionId?: number;
+  homeTeamId?: number;
+  awayTeamId?: number;
+  venueId?: number;
+} = {};
+
 export async function cleanupTestData() {
-  // Limpar dados de teste na ordem correta (respeitando FKs)
-  await db.delete(matches).where(eq(matches.id, -1)); // placeholder
-  await db.delete(apiKeys).where(eq(apiKeys.email, "test@example.com"));
+  if (currentTestData.matchId) {
+    await db.delete(matchStatistics).where(eq(matchStatistics.matchId, currentTestData.matchId)).catch(() => {});
+    await db.delete(matchEvents).where(eq(matchEvents.matchId, currentTestData.matchId)).catch(() => {});
+    await db.delete(matches).where(eq(matches.id, currentTestData.matchId)).catch(() => {});
+  }
+  // Limpar por segurança qualquer match com round 'TEST_ROUND' ou id inserido
+  await db.delete(matches).where(eq(matches.round, "TEST_ROUND")).catch(() => {});
+
+  if (currentTestData.seasonId) {
+    await db.delete(seasons).where(eq(seasons.id, currentTestData.seasonId)).catch(() => {});
+  }
+  if (currentTestData.competitionId) {
+    await db.delete(competitions).where(eq(competitions.id, currentTestData.competitionId)).catch(() => {});
+  }
+  await db.delete(competitions).where(eq(competitions.code, "BRA1")).catch(() => {});
+
+  if (currentTestData.player1Id) {
+    await db.delete(players).where(eq(players.id, currentTestData.player1Id)).catch(() => {});
+  }
+  if (currentTestData.player2Id) {
+    await db.delete(players).where(eq(players.id, currentTestData.player2Id)).catch(() => {});
+  }
+
+  if (currentTestData.homeTeamId) {
+    await db.delete(teams).where(eq(teams.id, currentTestData.homeTeamId)).catch(() => {});
+  }
+  if (currentTestData.awayTeamId) {
+    await db.delete(teams).where(eq(teams.id, currentTestData.awayTeamId)).catch(() => {});
+  }
+  await db.delete(teams).where(eq(teams.shortName, "TCFC")).catch(() => {});
+  await db.delete(teams).where(eq(teams.shortName, "TFFC")).catch(() => {});
+
+  if (currentTestData.venueId) {
+    await db.delete(venues).where(eq(venues.id, currentTestData.venueId)).catch(() => {});
+  }
+  await db.delete(venues).where(eq(venues.name, "Estádio de Teste")).catch(() => {});
+
+  await db.delete(apiKeys).where(ilike(apiKeys.email, "%@example.com")).catch(() => {});
+
+  currentTestData = {};
 }
 
 export function getTestApp() {
@@ -68,6 +116,9 @@ export function getTestAdminKey() {
 
 // Helpers para testes de integração
 export async function seedTestData() {
+  // Limpar primeiro para garantir idempotência
+  await cleanupTestData();
+
   // Venue
   const [venue] = await db.insert(venues).values({
     name: "Estádio de Teste",
@@ -142,11 +193,40 @@ export async function seedTestData() {
     homeTeamId: homeTeam.id,
     awayTeamId: awayTeam.id,
     round: "1",
-    kickoffTime: new Date(Date.now() + 86400000).toISOString(), // Amanhã
+    kickoffTime: new Date(Date.now() + 86400000), // Amanhã
     status: "SCHEDULED",
     homeScore: 0,
     awayScore: 0,
   }).returning();
+
+  // Match Statistics
+  await db.insert(matchStatistics).values([
+    {
+      matchId: match.id,
+      teamId: homeTeam.id,
+      possessionPct: 55,
+      shotsTotal: 12,
+      shotsOnTarget: 5,
+    },
+    {
+      matchId: match.id,
+      teamId: awayTeam.id,
+      possessionPct: 45,
+      shotsTotal: 9,
+      shotsOnTarget: 3,
+    },
+  ]);
+
+  currentTestData = {
+    venueId: venue.id,
+    homeTeamId: homeTeam.id,
+    awayTeamId: awayTeam.id,
+    competitionId: competition.id,
+    seasonId: season.id,
+    player1Id: player1.id,
+    player2Id: player2.id,
+    matchId: match.id,
+  };
 
   return { venue, homeTeam, awayTeam, competition, season, player1, player2, match };
 }
@@ -177,7 +257,7 @@ export function mockFetch(responses: Map<string, any>) {
 // Setup global
 beforeAll(async () => {
   await setupTestApp();
-  testApiKey = await createTestApiKey("FREE");
+  testApiKey = await createTestApiKey("ENTERPRISE");
   testAdminKey = await createTestApiKey("ENTERPRISE");
 }, 60000);
 

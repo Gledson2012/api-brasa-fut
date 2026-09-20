@@ -31,6 +31,12 @@ import { injuryRoutes } from "./routes/injuries.js";
 import { oddsRoutes } from "./routes/odds.js";
 import { financeRoutes } from "./routes/finances.js";
 import { scoutingRoutes } from "./routes/scouting.js";
+import { coachesRoutes } from "./routes/coaches.js";
+import { derbiesRoutes } from "./routes/derbies.js";
+import { varRoutes } from "./routes/var.js";
+import { penaltiesRoutes } from "./routes/penalties.js";
+import { attendanceRoutes } from "./routes/attendance.js";
+import { awardsRoutes } from "./routes/awards.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
@@ -78,6 +84,12 @@ export function buildApp() {
         { name: "Mercado da Bola & Transferências", description: "Histórico e movimentações de transferências de atletas entre clubes" },
         { name: "Arbitragem & Juízes", description: "Scouts de árbitros, médias de cartões, faltas e tendências de apito" },
         { name: "Exportação de Dados", description: "Download de tabelas, partidas e scouts em formato CSV" },
+        { name: "Treinadores & Comissões Técnicas", description: "Perfis de técnicos, histórico de carreira, títulos e DNA tático" },
+        { name: "Grandes Clássicos & Dérbis", description: "Histórico de rivalidades, maiores goleadas e retrospecto direto" },
+        { name: "Central do VAR & Arbitragem", description: "Auditoria de revisões de vídeo, tempos de paralisação e Tabela do VAR Líquido" },
+        { name: "Pênaltis & Especialistas", description: "Scouts de cobranças, melhores batedores, pegadores de pênaltis e disputas" },
+        { name: "Público & Bilheteria dos Estádios", description: "Médias de público pagante, taxa de ocupação das arenas e renda bruta acumulada" },
+        { name: "Premiações & Hall da Fama", description: "Bola de Ouro, Craque da Temporada, Golden Boy Revelação e Seleção do Ano" },
       ],
       components: {
         securitySchemes: {
@@ -164,6 +176,21 @@ export function buildApp() {
         exportStandings: "/api/v1/export/standings?seasonId=1",
         exportPlayers: "/api/v1/export/players?seasonId=1",
         exportMatches: "/api/v1/export/matches?seasonId=1",
+        coaches: "/api/v1/coaches",
+        coachesRanking: "/api/v1/coaches/ranking?sortBy=winRate",
+        derbies: "/api/v1/derbies",
+        derbyDetail: "/api/v1/derbies/derbi-paulista",
+        varMatch: "/api/v1/var/matches/:id",
+        varTable: "/api/v1/var/competitions/:id/table",
+        matchTacticalLineup: "/api/v1/matches/:id/tactical-lineup",
+        matchKits: "/api/v1/matches/:id/kits",
+        teamTacticalDna: "/api/v1/teams/:id/tactical-dna",
+        teamKits: "/api/v1/teams/:id/kits",
+        penaltiesTakers: "/api/v1/penalties/takers",
+        penaltiesGoalkeepers: "/api/v1/penalties/goalkeepers",
+        attendanceCompetition: "/api/v1/attendance/competitions/:id",
+        attendanceVenue: "/api/v1/attendance/venues/:id",
+        awardsSeason: "/api/v1/awards/season?competitionId=1",
       },
     };
   });
@@ -192,6 +219,12 @@ export function buildApp() {
   app.register(oddsRoutes, { prefix: "/api/v1/odds" });
   app.register(financeRoutes, { prefix: "/api/v1/finances" });
   app.register(scoutingRoutes, { prefix: "/api/v1/scouting" });
+  app.register(coachesRoutes, { prefix: "/api/v1/coaches" });
+  app.register(derbiesRoutes, { prefix: "/api/v1/derbies" });
+  app.register(varRoutes, { prefix: "/api/v1/var" });
+  app.register(penaltiesRoutes, { prefix: "/api/v1/penalties" });
+  app.register(attendanceRoutes, { prefix: "/api/v1/attendance" });
+  app.register(awardsRoutes, { prefix: "/api/v1/awards" });
 
   return app;
 }

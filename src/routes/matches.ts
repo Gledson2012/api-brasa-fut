@@ -21,6 +21,10 @@ import { HeatmapService } from "../services/heatmap.js";
 import { OddsService } from "../services/odds.js";
 import { BroadcastService } from "../services/broadcast.js";
 import { CommentaryService } from "../services/commentary.js";
+import { TacticsService } from "../services/tactics.js";
+import { KitsService } from "../services/kits.js";
+import { VarService } from "../services/var.js";
+import { PenaltiesService } from "../services/penalties.js";
 import { cache } from "../services/cache.js";
 
 const LIVE_STATUSES = [
@@ -980,6 +984,178 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
           awayScore: match.awayScore,
         }, importantOnly);
       });
+    }
+  );
+
+  // Prancheta Tática Oficial e Coordenadas 2D de Campo
+  app.get(
+    "/:id/tactical-lineup",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Prancheta tática visual e coordenadas 2D dos atletas em campo",
+        description:
+          "Retorna os 11 titulares de cada time com posições exatas em coordenadas (x, y) de 0 a 100 no gramado, papéis táticos (ex: Lateral Invertido, Falso 9), formação e reservas.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let home = { id: 1, name: "Flamengo", shortName: "Flamengo" };
+      let away = { id: 2, name: "Palmeiras", shortName: "Palmeiras" };
+
+      if (match) {
+        const [h] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h) home = { id: h.id, name: h.name, shortName: h.shortName || h.name };
+        if (a) away = { id: a.id, name: a.name, shortName: a.shortName || a.name };
+      }
+
+      return TacticsService.getMatchTacticalLineup({
+        id,
+        homeTeam: home,
+        awayTeam: away,
+      });
+    }
+  );
+
+  // Combinação de Uniformes e Paleta de Cores do Jogo
+  app.get(
+    "/:id/kits",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Uniformes e paleta de cores dos clubes para a partida",
+        description:
+          "Retorna os kits oficiais (camisa, calção, meião) selecionados para o confronto, garantindo contraste cromático ideal para gráficos e transmissões.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let home = { id: 1, name: "Flamengo", shortName: "Flamengo" };
+      let away = { id: 2, name: "Palmeiras", shortName: "Palmeiras" };
+
+      if (match) {
+        const [h] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h) home = { id: h.id, name: h.name, shortName: h.shortName || h.name };
+        if (a) away = { id: a.id, name: a.name, shortName: a.shortName || a.name };
+      }
+
+      return KitsService.getMatchdayKits({
+        id,
+        homeTeam: home,
+        awayTeam: away,
+      });
+    }
+  );
+
+  // Auditoria e Lances do VAR
+  app.get(
+    "/:id/var-reviews",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Auditoria e checagens do VAR na partida",
+        description:
+          "Lista todas as checagens e revisões de vídeo da partida com minutos, tempos de paralisação, recomendação da cabine e transcrição do áudio.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let hName = "Flamengo";
+      let aName = "Palmeiras";
+
+      if (match) {
+        const [h] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h?.name) hName = h.name;
+        if (a?.name) aName = a.name;
+      }
+
+      return VarService.getMatchVarReport(id, hName, aName);
+    }
+  );
+
+  // Disputa de Pênaltis
+  app.get(
+    "/:id/penalty-shootout",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Disputa de pênaltis cobrança a cobrança",
+        description:
+          "Relatório de penalidades máximas em jogos eliminatórios: cobrador, goleiro, canto mirado e resultado de cada cobrança.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+        })
+        .from(matches)
+        .where(eq(matches.id, id))
+        .limit(1);
+
+      let hName = "Mandante";
+      let aName = "Visitante";
+
+      if (match) {
+        const [h] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.homeTeamId)).limit(1);
+        const [a] = await db.select({ name: teams.shortName }).from(teams).where(eq(teams.id, match.awayTeamId)).limit(1);
+        if (h?.name) hName = h.name;
+        if (a?.name) aName = a.name;
+      }
+
+      return PenaltiesService.getMatchPenaltyShootout(id, hName, aName);
     }
   );
 };

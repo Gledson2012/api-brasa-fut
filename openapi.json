@@ -723,7 +723,41 @@
         "tags": [
           "Competições"
         ],
-        "description": "Retorna todas as ligas e copas cadastradas no sistema.",
+        "description": "Retorna todas as ligas e copas cadastradas no sistema com filtros opcionais por país, tipo ou busca.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "description": "Filtrar por país ou região (ex: Brasil, Inglaterra, Espanha, Europa)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LEAGUE",
+                "CUP",
+                "INTERNATIONAL"
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "description": "Filtrar por formato (LEAGUE, CUP, INTERNATIONAL)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Buscar por nome da competição"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -774,6 +808,43 @@
                       "type",
                       "logoUrl",
                       "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/competitions/countries": {
+      "get": {
+        "summary": "Listar todos os países e quantidade de ligas",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Retorna o catálogo de todos os países cadastrados com a contagem de campeonatos disponíveis em cada um.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string"
+                      },
+                      "totalCompetitions": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "country",
+                      "totalCompetitions"
                     ],
                     "additionalProperties": false
                   }
@@ -1388,6 +1459,54 @@
         "tags": [
           "Clubes"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/tactical-dna": {
+      "get": {
+        "summary": "DNA e filosofia tática do clube (Posse, Pressão Alta e Padrões de Ataque)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Analisa o estilo de jogo da equipe na temporada: formação padrão, percentual médio de posse, intensidade de pressão (PPDA), velocidade de transição e distribuição de jogadas pelos corredores.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/kits": {
+      "get": {
+        "summary": "Catálogo de uniformes oficiais e paleta de cores (Home, Away, Third, Goleiro)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Fornece os códigos hexadecimais oficiais de camisa, calção, meião e numeração de todos os uniformes do clube para renderização visual em interfaces.",
         "parameters": [
           {
             "schema": {
@@ -2283,6 +2402,102 @@
             "required": false,
             "description": "Filtrar apenas lances capitais (gols, cartões e VAR)"
           },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/tactical-lineup": {
+      "get": {
+        "summary": "Prancheta tática visual e coordenadas 2D dos atletas em campo",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna os 11 titulares de cada time com posições exatas em coordenadas (x, y) de 0 a 100 no gramado, papéis táticos (ex: Lateral Invertido, Falso 9), formação e reservas.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/kits": {
+      "get": {
+        "summary": "Uniformes e paleta de cores dos clubes para a partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Retorna os kits oficiais (camisa, calção, meião) selecionados para o confronto, garantindo contraste cromático ideal para gráficos e transmissões.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/var-reviews": {
+      "get": {
+        "summary": "Auditoria e checagens do VAR na partida",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Lista todas as checagens e revisões de vídeo da partida com minutos, tempos de paralisação, recomendação da cabine e transcrição do áudio.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/penalty-shootout": {
+      "get": {
+        "summary": "Disputa de pênaltis cobrança a cobrança",
+        "tags": [
+          "Partidas"
+        ],
+        "description": "Relatório de penalidades máximas em jogos eliminatórios: cobrador, goleiro, canto mirado e resultado de cada cobrança.",
+        "parameters": [
           {
             "schema": {
               "type": "number"
@@ -3288,6 +3503,372 @@
           }
         }
       }
+    },
+    "/api/v1/coaches/": {
+      "get": {
+        "summary": "Listar técnicos de futebol com filtros por clube, nacionalidade e status",
+        "tags": [
+          "Treinadores & Comissões Técnicas"
+        ],
+        "description": "Retorna o catálogo completo de treinadores com dados táticos, formação predileta, estatísticas de aproveitamento e clube atual.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "nationality",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "AVAILABLE"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/coaches/ranking": {
+      "get": {
+        "summary": "Ranking dos melhores técnicos por aproveitamento, títulos ou pontos por jogo",
+        "tags": [
+          "Treinadores & Comissões Técnicas"
+        ],
+        "description": "Compara os melhores comandantes do futebol brasileiro e internacional de acordo com seu percentual de vitórias (winRate), quantidade de troféus ou média de pontos (PPM).",
+        "parameters": [
+          {
+            "schema": {
+              "default": "winRate",
+              "type": "string",
+              "enum": [
+                "winRate",
+                "trophies",
+                "pointsPerMatch"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/coaches/{id}": {
+      "get": {
+        "summary": "Perfil completo de um técnico por ID",
+        "tags": [
+          "Treinadores & Comissões Técnicas"
+        ],
+        "description": "Apresenta histórico de carreira, DNA tático, cartões amarelos e vermelhos na carreira, aproveitamento em clássicos e títulos conquistados.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/coaches/{id}/career": {
+      "get": {
+        "summary": "Linha do tempo da carreira e passagens por clubes de um treinador",
+        "tags": [
+          "Treinadores & Comissões Técnicas"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/derbies/": {
+      "get": {
+        "summary": "Listar rivalidades históricas e grandes clássicos",
+        "tags": [
+          "Grandes Clássicos & Dérbis"
+        ],
+        "description": "Retorna os maiores clássicos do futebol brasileiro e internacional (Dérbi Paulista, Fla-Flu, Gre-Nal, Clássico Mineiro, El Clásico), incluindo placares históricos e vantagem.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "country",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/derbies/{slug}": {
+      "get": {
+        "summary": "Estatísticas completas de um clássico específico",
+        "tags": [
+          "Grandes Clássicos & Dérbis"
+        ],
+        "description": "Retorna retrospecto geral (vitórias, empates, gols), maiores goleadas de cada lado, maiores artilheiros históricos e últimos 5 confrontos diretos.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/var/matches/{id}": {
+      "get": {
+        "summary": "Auditoria de lances checados pelo VAR na partida",
+        "tags": [
+          "Central do VAR & Arbitragem"
+        ],
+        "description": "Retorna a cronologia de lances revisados pelo VAR em um jogo (pênaltis, impedimentos milimétricos, cartões vermelhos), tempo de paralisação e transcrição do diálogo da cabine com o árbitro de campo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/var/competitions/{id}/table": {
+      "get": {
+        "summary": "Tabela oficial do VAR Líquido (Impacto de decisões de arbitragem de vídeo)",
+        "tags": [
+          "Central do VAR & Arbitragem"
+        ],
+        "description": "Ranking completo dos clubes beneficiados vs prejudicados pelo VAR na competição, saldo líquido de intervenções, gols concedidos/anulados e impacto estimado em pontos.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/penalties/takers": {
+      "get": {
+        "summary": "Ranking dos melhores cobradores de pênalti",
+        "tags": [
+          "Pênaltis & Especialistas"
+        ],
+        "description": "Lista batedores com maior taxa de conversão (%), aproveitamento sob pressão e zonas prediletas de finalização nas cobranças.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 10,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/penalties/goalkeepers": {
+      "get": {
+        "summary": "Ranking de goleiros pegadores de pênalti",
+        "tags": [
+          "Pênaltis & Especialistas"
+        ],
+        "description": "Goleiros com maior percentual de defesas em penalidades máximas e histórico de decisões por pênaltis vencidas na carreira.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 10,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/penalties/matches/{id}/shootout": {
+      "get": {
+        "summary": "Auditoria e cobranças de disputa de pênaltis pós-jogo",
+        "tags": [
+          "Pênaltis & Especialistas"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/competitions/{id}": {
+      "get": {
+        "summary": "Ranking de público, bilheteria e ocupação da competição",
+        "tags": [
+          "Público & Bilheteria dos Estádios"
+        ],
+        "description": "Relatório financeiro e de engajamento das torcidas: média de público pagante por clube, taxa de ocupação da arena (%), renda bruta acumulada e preço médio do ingresso.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/venues/{id}": {
+      "get": {
+        "summary": "Estatísticas e recorde histórico de público de um estádio",
+        "tags": [
+          "Público & Bilheteria dos Estádios"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/awards/season": {
+      "get": {
+        "summary": "Premiações oficiais e corrida pelo Craque do Campeonato",
+        "tags": [
+          "Premiações & Hall da Fama"
+        ],
+        "description": "Retorna o ranking de votos e pontuação para a Bola de Ouro / Craque da Temporada, Revelação do Campeonato (Golden Boy), Luva de Ouro (Melhor Goleiro), Melhor Técnico e a Seleção Ideal do Campeonato.",
+        "parameters": [
+          {
+            "schema": {
+              "default": 1,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "competitionId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -3355,6 +3936,30 @@
     {
       "name": "Exportação de Dados",
       "description": "Download de tabelas, partidas e scouts em formato CSV"
+    },
+    {
+      "name": "Treinadores & Comissões Técnicas",
+      "description": "Perfis de técnicos, histórico de carreira, títulos e DNA tático"
+    },
+    {
+      "name": "Grandes Clássicos & Dérbis",
+      "description": "Histórico de rivalidades, maiores goleadas e retrospecto direto"
+    },
+    {
+      "name": "Central do VAR & Arbitragem",
+      "description": "Auditoria de revisões de vídeo, tempos de paralisação e Tabela do VAR Líquido"
+    },
+    {
+      "name": "Pênaltis & Especialistas",
+      "description": "Scouts de cobranças, melhores batedores, pegadores de pênaltis e disputas"
+    },
+    {
+      "name": "Público & Bilheteria dos Estádios",
+      "description": "Médias de público pagante, taxa de ocupação das arenas e renda bruta acumulada"
+    },
+    {
+      "name": "Premiações & Hall da Fama",
+      "description": "Bola de Ouro, Craque da Temporada, Golden Boy Revelação e Seleção do Ano"
     }
   ]
 }

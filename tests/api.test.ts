@@ -1,4 +1,4 @@
-import { test, describe, before, after } from "node:test";
+import { test, describe, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
 import { buildApp } from "../src/app.js";
 import { client } from "../src/db/index.js";
@@ -1048,6 +1048,247 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     assert.ok(scoutBody.playerId > 0);
     assert.ok(scoutBody.attributes.tacticalIQ > 0);
     assert.ok(scoutBody.scoutVerdict.recommendation);
+  });
+
+  test("47. Central de Treinadores e Comissões Técnicas (/coaches, /coaches/:id e /coaches/ranking)", async () => {
+    // Listar técnicos
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/coaches",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(listRes.statusCode, 200);
+    const listBody = JSON.parse(listRes.payload);
+    assert.ok(listBody.total > 0);
+    assert.ok(Array.isArray(listBody.data));
+    const c1 = listBody.data[0];
+    assert.ok(c1.name);
+    assert.ok(c1.tacticalDNA.preferredFormation);
+
+    // Ranking de técnicos
+    const rankRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/coaches/ranking?sortBy=winRate",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(rankRes.statusCode, 200);
+    const rankBody = JSON.parse(rankRes.payload);
+    assert.equal(rankBody.sortBy, "winRate");
+    assert.ok(rankBody.ranking[0].overallStats.winPercentage >= rankBody.ranking[1].overallStats.winPercentage);
+
+    // Perfil e carreira de técnico
+    const coachRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/coaches/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(coachRes.statusCode, 200);
+    const coachBody = JSON.parse(coachRes.payload);
+    assert.equal(coachBody.shortName, "Filipe Luís");
+    assert.ok(coachBody.trophiesCount > 0);
+
+    const careerRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/coaches/1/career",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(careerRes.statusCode, 200);
+    const careerBody = JSON.parse(careerRes.payload);
+    assert.ok(Array.isArray(careerBody.careerHistory));
+  });
+
+  test("48. Grandes Clássicos e Dérbis Históricos (/derbies e /derbies/:slug)", async () => {
+    // Listar dérbis
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/derbies",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(listRes.statusCode, 200);
+    const listBody = JSON.parse(listRes.payload);
+    assert.ok(listBody.total >= 4);
+    assert.ok(listBody.derbies.some((d: any) => d.slug === "derbi-paulista"));
+    assert.ok(listBody.derbies.some((d: any) => d.slug === "fla-flu"));
+
+    // Detalhes do Dérbi Paulista
+    const derbyRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/derbies/derbi-paulista",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(derbyRes.statusCode, 200);
+    const derbyBody = JSON.parse(derbyRes.payload);
+    assert.equal(derbyBody.slug, "derbi-paulista");
+    assert.ok(derbyBody.allTimeStats.totalMatches > 350);
+    assert.ok(derbyBody.biggestVictories.team1.score);
+    assert.ok(Array.isArray(derbyBody.allTimeTopScorers));
+    assert.ok(derbyBody.allTimeTopScorers.length > 0);
+  });
+
+  test("49. Central do VAR e Tabela do VAR Líquido (/var/matches/:id e /var/competitions/:id/table)", async () => {
+    // Auditoria de partida
+    const varRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/var/matches/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(varRes.statusCode, 200);
+    const varBody = JSON.parse(varRes.payload);
+    assert.equal(varBody.matchId, 1);
+    assert.ok(Array.isArray(varBody.incidents));
+    if (varBody.incidents.length > 0) {
+      assert.ok(varBody.incidents[0].varRecommendation);
+      assert.ok(varBody.incidents[0].audioTranscript);
+    }
+
+    // Tabela do VAR da competição
+    const tableRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/var/competitions/1/table",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(tableRes.statusCode, 200);
+    const tableBody = JSON.parse(tableRes.payload);
+    assert.ok(Array.isArray(tableBody.table));
+    assert.ok(tableBody.mostFavoredTeam);
+    assert.ok(tableBody.mostPenalizedTeam);
+  });
+
+  test("50. Prancheta Tática 2D e DNA Tático (/matches/:id/tactical-lineup e /teams/:id/tactical-dna)", async () => {
+    // Prancheta tática do jogo
+    const tacticRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/tactical-lineup",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(tacticRes.statusCode, 200);
+    const tacticBody = JSON.parse(tacticRes.payload);
+    assert.ok(tacticBody.homeTeam.starters);
+    assert.equal(tacticBody.homeTeam.starters.length, 11);
+    const p1 = tacticBody.homeTeam.starters[0];
+    assert.ok(p1.coordinates);
+    assert.ok(typeof p1.coordinates.x === "number");
+    assert.ok(typeof p1.coordinates.y === "number");
+    assert.ok(p1.tacticalRole);
+
+    // DNA Tático do time
+    const dnaRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams/1/tactical-dna",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(dnaRes.statusCode, 200);
+    const dnaBody = JSON.parse(dnaRes.payload);
+    assert.ok(dnaBody.philosophy);
+    assert.ok(dnaBody.metrics.possessionAveragePct > 0);
+    assert.ok(dnaBody.metrics.highPressingIntensityPpda > 0);
+  });
+
+  test("51. Central de Pênaltis e Goleiros Pegadores (/penalties/takers, /penalties/goalkeepers e /penalties/matches/:id/shootout)", async () => {
+    // Ranking batedores
+    const takersRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/penalties/takers?limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(takersRes.statusCode, 200);
+    const takersBody = JSON.parse(takersRes.payload);
+    assert.ok(Array.isArray(takersBody.ranking));
+    assert.ok(takersBody.ranking[0].conversionRatePct > 80);
+    assert.ok(takersBody.ranking[0].favoriteTargetZone);
+
+    // Ranking goleiros
+    const gkRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/penalties/goalkeepers?limit=5",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(gkRes.statusCode, 200);
+    const gkBody = JSON.parse(gkRes.payload);
+    assert.ok(Array.isArray(gkBody.ranking));
+    assert.ok(gkBody.ranking[0].savePercentagePct > 20);
+
+    // Disputa pós-jogo
+    const shootRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/penalties/matches/1/shootout",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(shootRes.statusCode, 200);
+    const shootBody = JSON.parse(shootRes.payload);
+    assert.ok(shootBody.winnerTeam);
+    assert.ok(Array.isArray(shootBody.kicks));
+    assert.ok(shootBody.kicks.length >= 5);
+  });
+
+  test("52. Público, Bilheteria e Ocupação dos Estádios (/attendance/competitions/:id e /attendance/venues/:id)", async () => {
+    // Ranking de público da liga
+    const attRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/attendance/competitions/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(attRes.statusCode, 200);
+    const attBody = JSON.parse(attRes.payload);
+    assert.ok(attBody.leagueTotalAttendance > 0);
+    assert.ok(Array.isArray(attBody.ranking));
+    const topClub = attBody.ranking[0];
+    assert.ok(topClub.averageAttendance > 0);
+    assert.ok(topClub.averageOccupancyRatePct > 0);
+    assert.ok(topClub.recordCrowd);
+
+    // Estádio recordes
+    const venRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/attendance/venues/1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(venRes.statusCode, 200);
+    const venBody = JSON.parse(venRes.payload);
+    assert.ok(venBody.venueName);
+    assert.ok(venBody.allTimeRecord.crowd > 0);
+  });
+
+  test("53. Paleta de Cores e Uniformes de Jogo (/teams/:id/kits e /matches/:id/kits)", async () => {
+    // Uniformes do clube
+    const teamKitsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams/1/kits",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(teamKitsRes.statusCode, 200);
+    const teamKitsBody = JSON.parse(teamKitsRes.payload);
+    assert.ok(teamKitsBody.kits.home.shirtColor.startsWith("#"));
+    assert.ok(teamKitsBody.kits.away.shirtColor.startsWith("#"));
+
+    // Combinação para a partida
+    const matchKitsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/1/kits",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(matchKitsRes.statusCode, 200);
+    const matchKitsBody = JSON.parse(matchKitsRes.payload);
+    assert.ok(matchKitsBody.homeTeam.kit.shirtColor);
+    assert.ok(matchKitsBody.awayTeam.kit.shirtColor);
+    assert.equal(matchKitsBody.contrastQuality, "OPTIMAL");
+  });
+
+  test("54. Premiações da Temporada, Bola de Ouro e Seleção Ideal (/awards/season)", async () => {
+    const awardsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/awards/season?competitionId=1",
+      headers: { "x-api-key": DEMO_KEY },
+    });
+    assert.equal(awardsRes.statusCode, 200);
+    const awardsBody = JSON.parse(awardsRes.payload);
+    assert.ok(awardsBody.playerOfTheSeason);
+    assert.ok(awardsBody.playerOfTheSeason.playerName);
+    assert.ok(awardsBody.goldenBoyRevelacao.playerName);
+    assert.ok(awardsBody.coachOfTheSeason.coachName);
+    assert.ok(Array.isArray(awardsBody.ballonDorRanking));
+    assert.ok(Array.isArray(awardsBody.idealStartingEleven.eleven));
+    assert.equal(awardsBody.idealStartingEleven.eleven.length, 11);
   });
 });
 
