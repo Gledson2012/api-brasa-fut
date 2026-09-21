@@ -1,8 +1,8 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { teams, teamRosters, players, venues, seasons, matches, competitions, standings } from "../db/schema.js";
-import { eq, ilike, and, or, desc, asc, count } from "drizzle-orm";
+import { teams, teamRosters, players, venues, seasons, matches, competitions, standings, teamAbsences } from "../db/schema.js";
+import { eq, ilike, and, or, desc, asc, count, inArray } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { paginate } from "../utils/pagination.js";
 import { unaccentIlike } from "../utils/search.js";
@@ -470,6 +470,159 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
           form, // Ex: ["W", "W", "D", "L", "W"]
           pastMatches: past.map(formatMatch),
           nextMatches: upcoming.map(formatMatch),
+        };
+      });
+    }
+  );
+
+  // Visão agregada do clube (home do app em 1 roundtrip)
+  app.get(
+    "/:id/overview",
+    {
+      schema: {
+        tags: ["Clubes"],
+        summary: "Visão agregada do clube (posição, forma, próximos jogos, desfalques)",
+        description:
+          "Agrega em uma única requisição: dados do clube, posição na temporada, forma recente, próximos jogos e total de desfalques.",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+        querystring: z.object({
+          seasonId: z.coerce.number().optional(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { seasonId } = request.query;
+      const cacheKey = `team:${id}:overview:${seasonId ?? "current"}`;
+
+      return await cache.wrap(cacheKey, 120, async () => {
+        const [team] = await db
+          .select({
+            id: teams.id,
+            name: teams.name,
+            shortName: teams.shortName,
+            acronym: teams.acronym,
+            foundedYear: teams.foundedYear,
+            country: teams.country,
+            logoUrl: teams.logoUrl,
+            venue: {
+              id: venues.id,
+              name: venues.name,
+              city: venues.city,
+              capacity: venues.capacity,
+            },
+          })
+          .from(teams)
+          .leftJoin(venues, eq(teams.venueId, venues.id))
+          .where(eq(teams.id, id));
+
+        if (!team) {
+          return reply.status(404).send({ error: "Clube não encontrado" });
+        }
+
+        // Temporada: informada ou a mais recente do clube via standings
+        let season = seasonId;
+        if (!season) {
+          const [latest] = await db
+            .select({ seasonId: standings.seasonId })
+            .from(standings)
+            .where(eq(standings.teamId, id))
+            .orderBy(desc(standings.seasonId))
+            .limit(1);
+          season = latest?.seasonId ?? undefined;
+        }
+
+        const [standing] = season
+          ? await db
+              .select()
+              .from(standings)
+              .where(and(eq(standings.teamId, id), eq(standings.seasonId, season)))
+          : [];
+
+        const past = await db
+          .select({
+            id: matches.id,
+            kickoffTime: matches.kickoffTime,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+          })
+          .from(matches)
+          .where(and(eq(matches.status, "FINISHED"), or(eq(matches.homeTeamId, id), eq(matches.awayTeamId, id))))
+          .orderBy(desc(matches.kickoffTime))
+          .limit(5);
+
+        const upcoming = await db
+          .select({
+            id: matches.id,
+            round: matches.round,
+            kickoffTime: matches.kickoffTime,
+            status: matches.status,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+          })
+          .from(matches)
+          .where(
+            and(
+              or(eq(matches.status, "SCHEDULED"), eq(matches.status, "POSTPONED")),
+              or(eq(matches.homeTeamId, id), eq(matches.awayTeamId, id))
+            )
+          )
+          .orderBy(asc(matches.kickoffTime))
+          .limit(3);
+
+        const form: Array<"W" | "D" | "L"> = past.map((m) => {
+          const isHome = m.homeTeamId === id;
+          const ours = isHome ? m.homeScore ?? 0 : m.awayScore ?? 0;
+          const theirs = isHome ? m.awayScore ?? 0 : m.homeScore ?? 0;
+          return ours > theirs ? "W" : ours < theirs ? "L" : "D";
+        });
+
+        const opponentIds = Array.from(
+          new Set(upcoming.map((m) => (m.homeTeamId === id ? m.awayTeamId : m.homeTeamId)))
+        );
+        const opponents =
+          opponentIds.length > 0
+            ? await db
+                .select({ id: teams.id, name: teams.name, shortName: teams.shortName, logoUrl: teams.logoUrl })
+                .from(teams)
+                .where(inArray(teams.id, opponentIds))
+            : [];
+        const oppMap = new Map(opponents.map((t) => [t.id, t]));
+
+        const [absRow] = await db
+          .select({ count: count() })
+          .from(teamAbsences)
+          .where(eq(teamAbsences.teamId, id));
+
+        return {
+          team,
+          seasonId: season ?? null,
+          standing: standing
+            ? {
+                position: standing.position,
+                points: standing.points,
+                played: standing.played,
+                won: standing.won,
+                drawn: standing.drawn,
+                lost: standing.lost,
+                goalDifference: standing.goalDifference,
+                form: standing.form,
+              }
+            : null,
+          form,
+          nextMatches: upcoming.map((m) => ({
+            id: m.id,
+            round: m.round,
+            kickoffTime: m.kickoffTime,
+            status: m.status,
+            isHome: m.homeTeamId === id,
+            opponent: oppMap.get(m.homeTeamId === id ? m.awayTeamId : m.homeTeamId) ?? null,
+          })),
+          absencesCount: Number(absRow?.count ?? 0),
         };
       });
     }

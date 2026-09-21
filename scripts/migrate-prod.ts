@@ -36,6 +36,25 @@ async function main() {
   // Extensão para busca insensível a acentos (usada por unaccentIlike em search/teams/players)
   await client`CREATE EXTENSION IF NOT EXISTS "unaccent";`;
 
+  // Sprint 2: rotação de chaves (grace period) + metering de uso
+  await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS previous_key VARCHAR(64);`;
+  await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS previous_key_expires_at TIMESTAMPTZ;`;
+  await client`DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_api_keys_previous_key ON api_keys (previous_key);
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$;`;
+  await client`
+    CREATE TABLE IF NOT EXISTS api_usage (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      api_key_id BIGINT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+      day DATE NOT NULL,
+      count INTEGER DEFAULT 1 NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT uq_api_usage_key_day UNIQUE (api_key_id, day)
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_usage_key_day ON api_usage (api_key_id, day);
+  `;
+
   const passHash = hashPassword(password);
   await client`
     INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)

@@ -83,7 +83,7 @@ export function buildApp() {
         title: "BrasaFut API - Documentação Oficial",
         description:
           "API profissional de futebol de alta performance, com suporte a campeonatos brasileiros e internacionais, dados em tempo real, estatísticas de partidas e webhooks.",
-        version: "1.1.0",
+        version: "1.2.0",
       },
       tags: [
         { name: "Autenticação & Planos", description: "Geração de chaves, limites e planos" },
@@ -133,7 +133,7 @@ export function buildApp() {
   app.get("/health", async () => {
     return {
       status: "ok",
-      version: "1.1.0",
+      version: "1.2.0",
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     };
@@ -142,7 +142,7 @@ export function buildApp() {
   app.get("/api/v1/health", async () => {
     return {
       status: "ok",
-      version: "1.1.0",
+      version: "1.2.0",
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     };
@@ -152,11 +152,13 @@ export function buildApp() {
     return {
       name: "BrasaFut API",
       status: "online",
-      version: "1.1.0",
+      version: "1.2.0",
       documentation: "/docs",
       realtimeWebSocket: "/api/v1/live/ws",
       endpoints: {
         authRegister: "POST /api/v1/auth/register",
+        authRotate: "POST /api/v1/auth/rotate",
+        authUsage: "GET /api/v1/auth/usage",
         authPlans: "GET /api/v1/auth/plans",
         competitions: "/api/v1/competitions",
         teams: "/api/v1/teams",
@@ -184,6 +186,7 @@ export function buildApp() {
         teamAbsences: "/api/v1/teams/:id/absences",
         teamH2H: "/api/v1/teams/:team1Id/vs/:team2Id",
         teamCompare: "/api/v1/teams/compare?team1=1&team2=2",
+        teamOverview: "/api/v1/teams/:id/overview",
         teamTrophies: "/api/v1/teams/:id/trophies",
         competitionChampions: "/api/v1/competitions/:id/champions",
         competitionTotw: "/api/v1/competitions/:id/team-of-the-week?round=26",

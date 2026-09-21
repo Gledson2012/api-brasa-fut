@@ -288,4 +288,85 @@ describe("BrasaFut API - Segurança e contrato", () => {
     assert.ok(Array.isArray(body.homeTeam.starters));
     assert.ok(Array.isArray(body.awayTeam.substitutes));
   });
+
+  test("16. Rotação de chave com grace period de 24h (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    const rot = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/rotate",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(rot.statusCode, 201);
+    const { key: newKey, previousKeyExpiresAt } = JSON.parse(rot.payload);
+    assert.ok(newKey.startsWith("bf_live_"));
+    assert.ok(newKey !== key);
+    assert.ok(Date.parse(previousKeyExpiresAt) > Date.now());
+
+    // Nova chave funciona
+    const meNew = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": newKey },
+    });
+    assert.equal(meNew.statusCode, 200);
+
+    // Chave antiga ainda funciona no grace period, com aviso
+    const meOld = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(meOld.statusCode, 200);
+    assert.equal(meOld.headers["x-api-key-rotated"], "true");
+  });
+
+  test("17. Consumo metering em /auth/usage (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: { "x-api-key": key } });
+    // Pequena espera p/ o metering fire-and-forget persistir
+    await new Promise((r) => setTimeout(r, 300));
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/usage",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(typeof body.monthTotal, "number");
+    assert.ok(body.monthTotal >= 1);
+    assert.ok(Array.isArray(body.daily));
+    assert.equal(typeof body.today, "number");
+  });
+
+  test("18. Overview agregado do clube (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    const teamsRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams?limit=1",
+      headers: { "x-api-key": key },
+    });
+    const firstTeam = JSON.parse(teamsRes.payload).data[0];
+    if (!firstTeam) return t.skip("sem clubes no banco");
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/teams/${firstTeam.id}/overview`,
+      headers: { "x-api-key": key },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.team.id, firstTeam.id);
+    assert.ok(Array.isArray(body.form));
+    assert.ok(Array.isArray(body.nextMatches));
+    assert.equal(typeof body.absencesCount, "number");
+
+    const notFound = await app.inject({
+      method: "GET",
+      url: "/api/v1/teams/999999999/overview",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(notFound.statusCode, 404);
+  });
 });

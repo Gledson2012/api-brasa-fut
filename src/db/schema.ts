@@ -344,6 +344,8 @@ export const apiKeys = pgTable(
     email: varchar("email", { length: 150 }).notNull().unique(),
     passwordHash: varchar("password_hash", { length: 255 }),
     key: varchar("key", { length: 64 }).notNull().unique(),
+    previousKey: varchar("previous_key", { length: 64 }).unique(),
+    previousKeyExpiresAt: timestamp("previous_key_expires_at", { withTimezone: true }),
     plan: apiPlanEnum("plan").default("FREE").notNull(),
     rateLimitPerMinute: integer("rate_limit_per_minute").default(10).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
@@ -386,6 +388,27 @@ export const webhookDeliveries = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [index("idx_webhook_deliveries_webhook_id").on(table.webhookId)]
+);
+
+// ----------------------------------------------------------------------------
+// 10b. API USAGE / METERING (contagem diária de requisições por chave)
+// ----------------------------------------------------------------------------
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    apiKeyId: bigint("api_key_id", { mode: "number" })
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    count: integer("count").default(1).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_api_usage_key_day").on(table.apiKeyId, table.day),
+    index("idx_api_usage_key_day").on(table.apiKeyId, table.day),
+  ]
 );
 
 // ----------------------------------------------------------------------------

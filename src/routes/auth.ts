@@ -1,10 +1,11 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { apiKeys } from "../db/schema.js";
-import { eq, or } from "drizzle-orm";
+import { apiKeys, apiUsage } from "../db/schema.js";
+import { eq, or, desc, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "../utils/password.js";
+import { invalidateKeyCache } from "../middleware/auth.js";
 
 export const authRoutes: FastifyPluginAsyncZod = async (app) => {
   // Planos disponíveis
@@ -334,8 +335,94 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     }
   );
 
-  // Endpoint de migração removido por segurança (410 Gone).
-  // Migrações DDL e seed administrativo devem rodar via CLI: `npm run db:migrate`
+  // Rotação de chave: gera nova key; a anterior segue válida por 24h (grace period)
+  app.post(
+    "/rotate",
+    {
+      schema: {
+        tags: ["Autenticação & Planos"],
+        summary: "Rotacionar chave de API (antiga válida por 24h)",
+        description:
+          "Gera uma nova chave e move a atual para grace period de 24h. Requisições com a chave antiga recebem o cabeçalho X-Api-Key-Rotated.",
+        response: {
+          201: z.object({
+            message: z.string(),
+            key: z.string(),
+            previousKeyExpiresAt: z.string(),
+          }),
+          401: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = (request as any).apiUser;
+      if (!user) {
+        return reply.status(401).send({ error: "Não autenticado" });
+      }
+
+      const oldKey = user.key as string;
+      const newKey = `bf_live_${randomBytes(20).toString("hex")}`;
+      const graceExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db
+        .update(apiKeys)
+        .set({
+          key: newKey,
+          previousKey: oldKey,
+          previousKeyExpiresAt: graceExpiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(apiKeys.id, user.id));
+
+      invalidateKeyCache(oldKey, newKey);
+
+      return reply.status(201).send({
+        message: "Chave rotacionada com sucesso. A anterior expira em 24h.",
+        key: newKey,
+        previousKeyExpiresAt: graceExpiresAt.toISOString(),
+      });
+    }
+  );
+
+  // Consumo (metering): requisições por dia no mês corrente
+  app.get(
+    "/usage",
+    {
+      schema: {
+        tags: ["Autenticação & Planos"],
+        summary: "Consultar consumo diário da chave no mês corrente",
+      },
+    },
+    async (request, reply) => {
+      const user = (request as any).apiUser;
+      if (!user) {
+        return reply.status(401).send({ error: "Não autenticado" });
+      }
+
+      const rows = await db
+        .select({ day: apiUsage.day, count: apiUsage.count })
+        .from(apiUsage)
+        .where(
+          sql`${apiUsage.apiKeyId} = ${user.id} AND date_trunc('month', ${apiUsage.day}) = date_trunc('month', CURRENT_DATE)`
+        )
+        .orderBy(desc(apiUsage.day))
+        .limit(31);
+
+      const monthTotal = rows.reduce((acc, r) => acc + (r.count ?? 0), 0);
+      const today = new Date().toISOString().slice(0, 10);
+      const todayRow = rows.find((r) => String(r.day).slice(0, 10) === today);
+
+      return {
+        plan: user.plan,
+        rateLimitPerMinute: user.rateLimitPerMinute,
+        monthTotal,
+        today: todayRow?.count ?? 0,
+        daily: rows,
+      };
+    }
+  );
+
+  // Endpoint de migração removido por segurança (410 Gone).  // Migrações DDL e seed administrativo devem rodar via CLI: `npm run db:migrate`
   // ou `tsx scripts/migrate-prod.ts` com ADMIN_SECRET. Nunca expor DDL via HTTP.
   app.get(
     "/migrate-db",

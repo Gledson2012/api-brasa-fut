@@ -1,6 +1,6 @@
 {
   "name": "api-brasa-fut",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "API profissional de futebol brasileiro e internacional com suporte a dados em tempo real",
   "main": "src/server.ts",
   "type": "module",

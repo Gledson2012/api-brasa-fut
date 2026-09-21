@@ -1,8 +1,9 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db/index.js";
 import { apiKeys } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { rateLimiter } from "../services/rateLimiter.js";
+import { recordUsage } from "../services/usage.js";
 
 // Cache em memória de API Keys válidas para latência quase zero (TTL de 60s)
 interface CachedKey {
@@ -18,6 +19,13 @@ interface CachedKey {
 
 const keyCache = new Map<string, CachedKey>();
 const CACHE_TTL_MS = 60 * 1000;
+
+/** Invalida o cache de uma chave (usado após rotação/desativação). */
+export function invalidateKeyCache(...keys: Array<string | null | undefined>) {
+  for (const k of keys) {
+    if (k) keyCache.delete(k);
+  }
+}
 
 export async function authAndRateLimitMiddleware(
   request: FastifyRequest,
@@ -67,7 +75,7 @@ export async function authAndRateLimitMiddleware(
     const [dbKey] = await db
       .select()
       .from(apiKeys)
-      .where(eq(apiKeys.key, rawKey));
+      .where(or(eq(apiKeys.key, rawKey), eq(apiKeys.previousKey, rawKey)));
 
     if (!dbKey) {
       reply.status(401).send({
@@ -75,6 +83,20 @@ export async function authAndRateLimitMiddleware(
         message: "A chave informada não existe ou foi revogada.",
       });
       return;
+    }
+
+    // Chave anterior (grace period de 24h após rotação)
+    if (dbKey.key !== rawKey) {
+      const expiresAt = dbKey.previousKeyExpiresAt ? new Date(dbKey.previousKeyExpiresAt).getTime() : 0;
+      if (!dbKey.previousKey || expiresAt < Date.now()) {
+        reply.status(401).send({
+          error: "Chave de API Inválida",
+          message: "A chave informada não existe ou foi revogada.",
+        });
+        return;
+      }
+      reply.header("X-Api-Key-Rotated", "true");
+      reply.header("Warning", '299 - "Chave em período de transição. Atualize para a nova chave."');
     }
 
     if (!dbKey.isActive) {
@@ -89,7 +111,12 @@ export async function authAndRateLimitMiddleware(
       ...dbKey,
       cachedAt: now,
     };
-    keyCache.set(rawKey, keyRecord);
+    // Chaves em grace period não são cacheadas: o expiry de 24h é verificado no banco.
+    if (dbKey.key === rawKey) {
+      keyCache.set(rawKey, keyRecord);
+    } else {
+      keyCache.delete(rawKey);
+    }
   }
 
   // Validar Rate Limiting (distribuído via Redis quando configurado)
@@ -118,6 +145,9 @@ export async function authAndRateLimitMiddleware(
 
   // Anexar dados do usuário autenticado no request context
   (request as any).apiUser = keyRecord;
+
+  // Metering best-effort (não bloqueia a resposta)
+  recordUsage(keyRecord.id);
 }
 
 export function requireAdminOrPlan(

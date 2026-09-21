@@ -3,7 +3,7 @@
   "info": {
     "title": "BrasaFut API - Documentação Oficial",
     "description": "API profissional de futebol de alta performance, com suporte a campeonatos brasileiros e internacionais, dados em tempo real, estatísticas de partidas e webhooks.",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "components": {
     "securitySchemes": {
@@ -393,6 +393,76 @@
     "/api/v1/auth/me": {
       "get": {
         "summary": "Consultar dados da chave autenticada e limites de consumo",
+        "tags": [
+          "Autenticação & Planos"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/rotate": {
+      "post": {
+        "summary": "Rotacionar chave de API (antiga válida por 24h)",
+        "tags": [
+          "Autenticação & Planos"
+        ],
+        "description": "Gera uma nova chave e move a atual para grace period de 24h. Requisições com a chave antiga recebem o cabeçalho X-Api-Key-Rotated.",
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "previousKeyExpiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "key",
+                    "previousKeyExpiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/usage": {
+      "get": {
+        "summary": "Consultar consumo diário da chave no mês corrente",
         "tags": [
           "Autenticação & Planos"
         ],
@@ -1439,6 +1509,38 @@
             },
             "in": "query",
             "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{id}/overview": {
+      "get": {
+        "summary": "Visão agregada do clube (posição, forma, próximos jogos, desfalques)",
+        "tags": [
+          "Clubes"
+        ],
+        "description": "Agrega em uma única requisição: dados do clube, posição na temporada, forma recente, próximos jogos e total de desfalques.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "query",
+            "name": "seasonId",
             "required": false
           },
           {

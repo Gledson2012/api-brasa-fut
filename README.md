@@ -137,6 +137,12 @@ A API estará disponível em:
 * **Listas paginadas** retornam sempre `{ page, limit, total, totalPages, data }` (`matches`, `teams`, `players`, `venues`, `competitions`, `transfers`).
 * **Busca insensível a acentos**: `?search=sao paulo` encontra "São Paulo" (extensão `unaccent`; rode `scripts/migrate-prod.ts` em bancos existentes).
 
+## 📦 Novidades v1.2.0
+
+* **Rotação de chaves**: `POST /api/v1/auth/rotate` gera nova key; a antiga vale por 24h (requisições com ela recebem `X-Api-Key-Rotated: true`).
+* **Metering**: `GET /api/v1/auth/usage` mostra total do mês, hoje e série diária.
+* **Overview do clube**: `GET /api/v1/teams/:id/overview` agrega clube, posição, forma, próximos 3 jogos e desfalques em 1 roundtrip.
+
 ---
 
 ## 📜 Licença
