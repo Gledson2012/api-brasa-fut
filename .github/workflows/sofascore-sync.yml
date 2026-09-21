@@ -24,6 +24,16 @@ jobs:
 
       - name: Run Sofascore Sync Worker
         env:
-          TARGET_URL: ${{ secrets.TARGET_URL || 'https://api-brasa-fut.vercel.app' }}
-          API_KEY: ${{ secrets.API_KEY || secrets.BRASA_API_KEY }}
-        run: npm run sync:sofascore
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+          BRASA_API_KEY: ${{ secrets.BRASA_API_KEY }}
+        run: |
+          if [ -z "$API_KEY" ] && [ -z "$BRASA_API_KEY" ]; then
+            echo "::error::Secret API_KEY (ou BRASA_API_KEY) não configurado. Defina em Settings > Secrets."
+            exit 1
+          fi
+          if [ -z "$TARGET_URL" ]; then
+            echo "::warning::Secret TARGET_URL não configurado, usando produção padrão."
+            export TARGET_URL="https://api-brasa-fut.vercel.app"
+          fi
+          npm run sync:sofascore

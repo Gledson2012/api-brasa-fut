@@ -38,14 +38,37 @@ dotenv.config();
 export function buildApp() {
   const app = fastify({
     logger: true,
+    trustProxy: true,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // CORS
+  // Remover fingerprint do framework
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (process.env.NODE_ENV === "production") {
+      reply.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+    }
+    reply.removeHeader("X-Powered-By");
+    return payload;
+  });
+
+  // CORS restritivo por ambiente (evita expor a API a qualquer origem em produção)
+  const corsOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (process.env.NODE_ENV === "production" && corsOrigins.length === 0) {
+    console.warn(
+      "⚠️ [cors] CORS_ORIGIN não configurado em produção. Defina domínios separados por vírgula."
+    );
+  }
   app.register(cors, {
-    origin: "*",
+    origin: corsOrigins.length > 0 ? corsOrigins : "*",
   });
 
   // WebSockets para tempo real (apenas fora do ambiente Serverless da Vercel)
@@ -107,6 +130,24 @@ export function buildApp() {
   });
 
   // Rota raiz e status
+  app.get("/health", async () => {
+    return {
+      status: "ok",
+      version: "1.0.0",
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
+  });
+
+  app.get("/api/v1/health", async () => {
+    return {
+      status: "ok",
+      version: "1.0.0",
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
+  });
+
   app.get("/", async () => {
     return {
       name: "BrasaFut API",

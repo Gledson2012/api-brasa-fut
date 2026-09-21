@@ -25,14 +25,19 @@ export async function authAndRateLimitMiddleware(
 ) {
   const url = request.url.split("?")[0];
 
-  // Rotas públicas que não necessitam de API Key
+  // Rotas públicas que não necessitam de API Key.
+  // NOTA: endpoints de migração/seed NUNCA devem ser públicos (ver scripts/migrate-prod.ts).
   const isPublicRoute =
     url === "/" ||
+    url === "/health" ||
+    url === "/api/v1/health" ||
     url.startsWith("/docs") ||
-    url.startsWith("/api/v1/auth/register") ||
-    url.startsWith("/api/v1/auth/login") ||
-    url.startsWith("/api/v1/auth/plans") ||
-    url.startsWith("/api/v1/auth/migrate-db") ||
+    url === "/api/v1/auth/register" ||
+    url.startsWith("/api/v1/auth/register?") ||
+    url === "/api/v1/auth/login" ||
+    url.startsWith("/api/v1/auth/login?") ||
+    url === "/api/v1/auth/plans" ||
+    url.startsWith("/api/v1/auth/plans?") ||
     url.startsWith("/api/v1/live/ws");
 
   if (isPublicRoute) {
@@ -87,8 +92,8 @@ export async function authAndRateLimitMiddleware(
     keyCache.set(rawKey, keyRecord);
   }
 
-  // Validar Rate Limiting
-  const rateLimitResult = rateLimiter.check(
+  // Validar Rate Limiting (distribuído via Redis quando configurado)
+  const rateLimitResult = await rateLimiter.check(
     keyRecord.key,
     keyRecord.rateLimitPerMinute
   );
@@ -99,13 +104,14 @@ export async function authAndRateLimitMiddleware(
   reply.header("X-RateLimit-Reset", rateLimitResult.resetSeconds.toString());
 
   if (!rateLimitResult.allowed) {
+    reply.header("Retry-After", rateLimitResult.resetSeconds.toString());
     reply.status(429).send({
       error: "Too Many Requests",
       message: `Limite de ${rateLimitResult.limit} requisições por minuto excedido para o plano ${keyRecord.plan}.`,
       limit: rateLimitResult.limit,
       resetInSeconds: rateLimitResult.resetSeconds,
       plan: keyRecord.plan,
-      upgrade: keyRecord.plan === "FREE" ? "Atualize para o plano PRO para limite de 100 req/min." : undefined,
+      upgrade: keyRecord.plan === "FREE" ? "Atualize para o plano PRO para limite de 120 req/min." : undefined,
     });
     return;
   }

@@ -79,21 +79,25 @@ async function initCloud() {
         ALTER TABLE player_season_statistics ADD COLUMN IF NOT EXISTS penalty_saves INTEGER DEFAULT 0 NOT NULL;
       `);
       const { hashPassword } = await import("../utils/password.js");
-      const passHash = hashPassword("BrasaFut@Enterprise2026");
-      const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
+      const { randomBytes } = await import("node:crypto");
+      const enterpriseEmail = (process.env.ENTERPRISE_EMAIL || "enterprise@brasafut.com.br").toLowerCase();
+      const enterprisePassword = process.env.ENTERPRISE_PASSWORD;
+      const enterpriseKey =
+        process.env.ENTERPRISE_API_KEY || `bf_live_enterprise_${randomBytes(24).toString("hex")}`;
 
-      await sql`
-        INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
-        VALUES ('enterprise_admin', 'enterprise@brasafut.com.br', ${passHash}, ${key}, 'ENTERPRISE', 1000, true)
-        ON CONFLICT (email) DO UPDATE SET
-          user_name = EXCLUDED.user_name,
-          password_hash = EXCLUDED.password_hash,
-          key = EXCLUDED.key,
-          plan = 'ENTERPRISE',
-          rate_limit_per_minute = 1000,
-          is_active = true,
-          updated_at = NOW();
-      `;
+      if (!enterprisePassword) {
+        console.warn(
+          "⚠️ ENTERPRISE_PASSWORD não definido — pulando seed da conta admin (não criar admin com senha padrão em nuvem)."
+        );
+      } else {
+        const passHash = hashPassword(enterprisePassword);
+        await sql`
+          INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
+          VALUES ('enterprise_admin', ${enterpriseEmail}, ${passHash}, ${enterpriseKey}, 'ENTERPRISE', 1000, true)
+          ON CONFLICT (email) DO NOTHING;
+        `;
+        console.log("✅ Conta ENTERPRISE garantida (sem sobrescrever credenciais existentes).");
+      }
 
       await sql.end();
     }

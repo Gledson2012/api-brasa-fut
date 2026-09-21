@@ -1,11 +1,20 @@
+import { isRedisConfigured, logRedisMode, redisDel, redisGet, redisSetex } from "./redis.js";
+
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;
 }
 
+/**
+ * Cache com backend distribuído opcional (Upstash Redis REST).
+ * - Com UPSTASH_* configurado: leitura/escrita no Redis, compartilhado
+ *   entre instâncias e deployments serverless.
+ * - Sem Redis: fallback em memória (single-instance / dev).
+ */
 export class CacheService {
   private memoryCache = new Map<string, CacheEntry<unknown>>();
   private defaultTtlSeconds: number;
+  private logged = false;
 
   constructor(defaultTtlSeconds: number = 60) {
     this.defaultTtlSeconds = defaultTtlSeconds;
@@ -23,7 +32,26 @@ export class CacheService {
     }
   }
 
+  private ensureLogged() {
+    if (!this.logged) {
+      this.logged = true;
+      logRedisMode("cache");
+    }
+  }
+
   public async get<T>(key: string): Promise<T | null> {
+    this.ensureLogged();
+    if (isRedisConfigured()) {
+      try {
+        const raw = await redisGet(key);
+        if (raw !== null) {
+          return JSON.parse(raw) as T;
+        }
+      } catch {
+        // fallback para memória
+      }
+    }
+
     const entry = this.memoryCache.get(key);
     if (!entry) return null;
 
@@ -36,14 +64,30 @@ export class CacheService {
   }
 
   public async set<T>(key: string, value: T, ttlSeconds: number = this.defaultTtlSeconds): Promise<void> {
+    this.ensureLogged();
     this.memoryCache.set(key, {
       value,
       expiresAt: Date.now() + ttlSeconds * 1000,
     });
+
+    if (isRedisConfigured()) {
+      try {
+        await redisSetex(key, ttlSeconds, JSON.stringify(value));
+      } catch {
+        // memória já cobre
+      }
+    }
   }
 
   public async del(key: string): Promise<void> {
     this.memoryCache.delete(key);
+    if (isRedisConfigured()) {
+      try {
+        await redisDel(key);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   public async delPattern(prefix: string): Promise<void> {
@@ -52,6 +96,8 @@ export class CacheService {
         this.memoryCache.delete(key);
       }
     }
+    // Upstash REST não tem SCAN barato por padrão; o TTL expira as chaves
+    // remotas automaticamente. Documentado como limitação consciente.
   }
 
   public async flush(): Promise<void> {

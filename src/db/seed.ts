@@ -18,6 +18,11 @@ import {
 import { hashPassword } from "../utils/password.js";
 
 export async function seed(closeClient: boolean = true) {
+  const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+  if (isProd && !process.env.ALLOW_DESTRUCTIVE_SEED) {
+    throw new Error("Seed destrutivo bloqueado em produção (defina ALLOW_DESTRUCTIVE_SEED=1 para forçar).");
+  }
+
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
 
   // Limpar tabelas existentes (ordem reversa de dependências)
@@ -210,12 +215,22 @@ export async function seed(closeClient: boolean = true) {
   await SofascoreSyncService.sync(true);
 
   console.log("🔑 Inserindo Chaves de API para demonstração...");
+  const { randomBytes } = await import("node:crypto");
+  const enterpriseEmail = (process.env.ENTERPRISE_EMAIL || "enterprise@brasafut.com.br").toLowerCase();
+  const enterprisePassword = process.env.ENTERPRISE_PASSWORD || "DevEnterprise@123456";
+  const enterpriseKey =
+    process.env.ENTERPRISE_API_KEY || `bf_live_enterprise_${randomBytes(12).toString("hex")}`;
+  const devPassword = process.env.DEV_PASSWORD || "DevPro@2026!";
+  const freePassword = process.env.FREE_PASSWORD || "FreeUser@2026!";
+  if (!process.env.ENTERPRISE_PASSWORD) {
+    console.warn("⚠️ ENTERPRISE_PASSWORD não definido; usando senha DEV fraca (nunca em produção).");
+  }
   await db.insert(apiKeys).values([
     {
       userName: "enterprise_admin",
-      email: "enterprise@brasafut.com.br",
-      passwordHash: hashPassword("BrasaFut@Enterprise2026"),
-      key: "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45",
+      email: enterpriseEmail,
+      passwordHash: hashPassword(enterprisePassword),
+      key: enterpriseKey,
       plan: "ENTERPRISE",
       rateLimitPerMinute: 1000,
       isActive: true,
@@ -223,8 +238,8 @@ export async function seed(closeClient: boolean = true) {
     {
       userName: "Dev Demonstração",
       email: "dev@brasafut.com.br",
-      passwordHash: hashPassword("DevPro@2026"),
-      key: "bf_live_demo_test_key_123",
+      passwordHash: hashPassword(devPassword),
+      key: process.env.DEV_API_KEY || "bf_live_demo_test_key_123",
       plan: "PRO",
       rateLimitPerMinute: 120,
       isActive: true,
@@ -232,8 +247,8 @@ export async function seed(closeClient: boolean = true) {
     {
       userName: "Usuário Gratuito",
       email: "free@brasafut.com.br",
-      passwordHash: hashPassword("FreeUser@2026"),
-      key: "bf_live_free_test_key_456",
+      passwordHash: hashPassword(freePassword),
+      key: process.env.FREE_API_KEY || "bf_live_free_test_key_456",
       plan: "FREE",
       rateLimitPerMinute: 10,
       isActive: true,

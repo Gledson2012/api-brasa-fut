@@ -118,5 +118,20 @@ A API estará disponível em:
 
 ---
 
+## 🔐 Configuração e segurança
+
+1. Copie `.env.example` para `.env` e preencha (nunca commite `.env`).
+2. Obrigatório em produção: `ADMIN_SECRET`, `BILLING_WEBHOOK_SECRET`, `CORS_ORIGIN`, `ENTERPRISE_PASSWORD`.
+3. Multi-instância/Vercel: `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (rate-limit, cache e fanout distribuídos; sem eles o modo é memória/single-instance).
+4. Pix ao vivo: `MP_ACCESS_TOKEN` (+ `BILLING_MP_WEBHOOK_URL`); sem ele o checkout usa sandbox local e o QR é renderizado pelo cliente a partir de `pixCopyPaste`.
+5. Seed/migração admin **somente via CLI** (endpoints HTTP removidos por segurança):
+   ```bash
+   ADMIN_SECRET=xxx ENTERPRISE_PASSWORD='senha-forte-12+' tsx scripts/migrate-prod.ts
+   ```
+6. Health público (sem auth, ideal p/ Docker/K8s/Vercel): `GET /health` e `GET /api/v1/health`.
+7. Webhook de billing exige `x-webhook-secret` (comparação timing-safe) quando `BILLING_WEBHOOK_SECRET` está definido; `simulate-pix-paid` é bloqueado em produção sem `x-admin-key`.
+
+---
+
 ## 📜 Licença
 MIT

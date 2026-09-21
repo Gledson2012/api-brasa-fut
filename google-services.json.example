@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "749185770012",
-    "project_id": "brasafut-app",
-    "storage_bucket": "brasafut-app.firebasestorage.app"
+    "project_number": "SEU_PROJECT_NUMBER",
+    "project_id": "SEU_PROJECT_ID",
+    "storage_bucket": "SEU_BUCKET"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:749185770012:android:4ad5139344cad4e6a5b5d9",
+        "mobilesdk_app_id": "SEU_MOBILESDK_APP_ID",
         "android_client_info": {
           "package_name": "com.example.brasafut"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDz3DFprhDGlPkJozxNobT_U6F4eH9AUT8"
+          "current_key": "SUA_API_KEY_ANDROID (restrinja por pacote/assinatura no console)"
         }
       ],
       "services": {

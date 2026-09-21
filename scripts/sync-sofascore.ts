@@ -4,8 +4,11 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const TARGET_URL = process.env.TARGET_URL || "https://api-brasa-fut.vercel.app";
-const API_KEY =
-  process.env.API_KEY || "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
+const API_KEY = process.env.API_KEY || process.env.BRASA_API_KEY || "";
+if (!API_KEY) {
+  console.error("❌ Defina API_KEY (ou BRASA_API_KEY) via env. Nenhuma chave padrão é usada por segurança.");
+  process.exit(1);
+}
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {

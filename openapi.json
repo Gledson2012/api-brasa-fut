@@ -269,11 +269,11 @@
     },
     "/api/v1/auth/enterprise/register": {
       "post": {
-        "summary": "Criar ou configurar conta do plano ENTERPRISE",
+        "summary": "Criar ou configurar conta do plano ENTERPRISE (admin)",
         "tags": [
           "Autenticação & Planos"
         ],
-        "description": "Cria uma conta Enterprise com taxa de 1.000 requisições por minuto e suporte total.",
+        "description": "Restrito a administradores via cabeçalho 'x-admin-key'. Cria uma conta Enterprise com taxa de 1.000 requisições por minuto.",
         "requestBody": {
           "required": true,
           "content": {
@@ -349,6 +349,25 @@
               }
             }
           },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "409": {
             "description": "Default Response",
             "content": {
@@ -386,7 +405,7 @@
     },
     "/api/v1/auth/migrate-db": {
       "get": {
-        "summary": "Executar migração de colunas e dados no banco de dados",
+        "summary": "Removido por segurança (use CLI com ADMIN_SECRET)",
         "tags": [
           "Autenticação & Planos"
         ],
@@ -403,7 +422,7 @@
         "tags": [
           "Billing & Monetização Pix"
         ],
-        "description": "Gera um QR Code Pix dinâmico e código Copia e Cola para pagamento instantâneo e upgrade de chave da API.",
+        "description": "Gera código Pix Copia e Cola para pagamento e upgrade de chave da API. O QR deve ser renderizado pelo cliente a partir de pixCopyPaste (não enviamos o payload a terceiros).",
         "requestBody": {
           "required": true,
           "content": {
@@ -413,7 +432,7 @@
                 "properties": {
                   "apiKey": {
                     "type": "string",
-                    "description": "Chave de API a ser atualizada"
+                    "description": "Chave de API a ser atualizada (deve pertencer ao chamador ou admin)"
                   },
                   "targetPlan": {
                     "default": "PRO",
@@ -484,6 +503,25 @@
               }
             }
           },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "404": {
             "description": "Default Response",
             "content": {
@@ -508,11 +546,11 @@
     },
     "/api/v1/billing/webhook": {
       "post": {
-        "summary": "Webhook de confirmação de pagamento Pix",
+        "summary": "Webhook de confirmação de pagamento Pix (autenticado via x-webhook-secret)",
         "tags": [
           "Billing & Monetização Pix"
         ],
-        "description": "Endpoint chamado automaticamente pelo gateway de pagamento (Mercado Pago, Asaas, etc.) quando o Pix é liquidado.",
+        "description": "Endpoint chamado pelo gateway de pagamento quando o Pix é liquidado. Exige cabeçalho 'x-webhook-secret' igual a BILLING_WEBHOOK_SECRET quando configurado.",
         "requestBody": {
           "required": true,
           "content": {
@@ -567,11 +605,11 @@
     },
     "/api/v1/billing/simulate-pix-paid/{paymentId}": {
       "post": {
-        "summary": "Simular confirmação de pagamento Pix (Ambiente de Testes)",
+        "summary": "Simular confirmação de pagamento Pix (Sandbox)",
         "tags": [
           "Billing & Monetização Pix"
         ],
-        "description": "Permite testar e aprovar instantaneamente uma cobrança Pix sem precisar movimentar dinheiro real.",
+        "description": "Disponível apenas fora de produção, ou em produção com 'x-admin-key'. Nunca exponha sem controle.",
         "parameters": [
           {
             "schema": {
@@ -723,7 +761,41 @@
         "tags": [
           "Competições"
         ],
-        "description": "Retorna todas as ligas e copas cadastradas no sistema.",
+        "description": "Retorna todas as ligas e copas cadastradas no sistema com filtros opcionais por país, tipo ou busca.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "description": "Filtrar por país ou região (ex: Brasil, Inglaterra, Espanha, Europa)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LEAGUE",
+                "CUP",
+                "INTERNATIONAL"
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "description": "Filtrar por formato (LEAGUE, CUP, INTERNATIONAL)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Buscar por nome da competição"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -774,6 +846,43 @@
                       "type",
                       "logoUrl",
                       "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/competitions/countries": {
+      "get": {
+        "summary": "Listar todos os países e quantidade de ligas",
+        "tags": [
+          "Competições"
+        ],
+        "description": "Retorna o catálogo de todos os países cadastrados com a contagem de campeonatos disponíveis em cada um.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string"
+                      },
+                      "totalCompetitions": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "country",
+                      "totalCompetitions"
                     ],
                     "additionalProperties": false
                   }
@@ -2521,7 +2630,7 @@
     },
     "/api/v1/sync/fix-logos": {
       "get": {
-        "summary": "Atualizar escudos legados para o CDN oficial do Sofascore",
+        "summary": "Atualizar escudos legados para o CDN oficial do Sofascore (admin)",
         "tags": [
           "Sincronização"
         ],
@@ -2534,7 +2643,7 @@
     },
     "/api/v1/sync/setup-enterprise": {
       "get": {
-        "summary": "Configurar conta ENTERPRISE e migrar tabela api_keys",
+        "summary": "Removido por segurança (use CLI com ADMIN_SECRET)",
         "tags": [
           "Sincronização"
         ],

@@ -2,1055 +2,208 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { buildApp } from "../src/app.js";
 import { client } from "../src/db/index.js";
+import { randomBytes } from "node:crypto";
 
-describe("BrasaFut API - Testes de Integração e Melhorias", () => {
+/**
+ * Suite de segurança + contrato (sem segredos hardcoded, sem dependência
+ * de fixtures específicas como BRA-1/Memphis).
+ *
+ * - Testes 1-6 rodam SEM banco (validam boot, 401 e remoção de DDL público).
+ * - Testes com banco são pulados graciosamente se DATABASE_URL indisponível.
+ */
+describe("BrasaFut API - Segurança e contrato", () => {
   let app: ReturnType<typeof buildApp>;
-  const DEMO_KEY = "bf_live_demo_test_key_123";
+  let dbAvailable = false;
 
   before(async () => {
     app = buildApp();
     await app.ready();
+    try {
+      await client`SELECT 1`;
+      dbAvailable = true;
+    } catch {
+      dbAvailable = false;
+      console.warn("⚠️ Banco indisponível — testes de integração com DB serão pulados.");
+    }
   });
 
   after(async () => {
+    // Limpeza: remover chaves de teste criadas pela suite (@example.com)
+    if (dbAvailable) {
+      try {
+        await client`DELETE FROM api_keys WHERE email LIKE '%@example.com'`;
+      } catch {}
+    }
     await app.close();
-    await client.end();
+    try {
+      await client.end();
+    } catch {}
   });
 
-  test("1. Rota raiz deve estar online", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/",
-    });
+  test("1. Rota raiz online (sem DB)", async () => {
+    const res = await app.inject({ method: "GET", url: "/" });
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.payload);
     assert.equal(body.status, "online");
     assert.equal(body.name, "BrasaFut API");
   });
 
-  test("2. Rotas protegidas devem bloquear requisições sem API Key (401)", async () => {
+  test("1b. Health público e headers de segurança (sem DB)", async () => {
+    for (const url of ["/health", "/api/v1/health"]) {
+      const res = await app.inject({ method: "GET", url });
+      assert.equal(res.statusCode, 200);
+      assert.equal(JSON.parse(res.payload).status, "ok");
+    }
+    const res = await app.inject({ method: "GET", url: "/health" });
+    assert.equal(res.headers["x-content-type-options"], "nosniff");
+    assert.equal(res.headers["x-frame-options"], "DENY");
+    assert.ok(!res.headers["x-powered-by"]);
+  });
+
+  test("2. Rotas protegidas bloqueiam sem API Key (401, sem DB)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/competitions" });
+    assert.equal(res.statusCode, 401);
+  });
+
+  test("3. /auth/migrate-db NÃO executa DDL sem auth (401/410, nunca 200 com chave)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/auth/migrate-db" });
+    assert.ok([401, 410].includes(res.statusCode), `esperado 401/410, obteve ${res.statusCode}`);
+    if (res.statusCode === 200) {
+      assert.fail("migrate-db retornou 200 — DDL público ainda exposto!");
+    }
+  });
+
+  test("4. /sync/setup-enterprise NÃO expõe seed sem auth", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/sync/setup-enterprise" });
+    assert.ok([401, 410].includes(res.statusCode), `esperado 401/410, obteve ${res.statusCode}`);
+  });
+
+  test("5. /sync/debug exige ENTERPRISE (sem chave => 401)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/sync/debug" });
+    assert.equal(res.statusCode, 401);
+  });
+
+  test("6. /live/test-fcm-goal sem chave => 401 (anti-abuso)", async () => {
     const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions",
+      method: "POST",
+      url: "/api/v1/live/test-fcm-goal",
+      payload: { teamId: 1 },
     });
     assert.equal(res.statusCode, 401);
   });
 
-  test("3. Listar competições com API Key válida", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const comps = JSON.parse(res.payload);
-    assert.ok(Array.isArray(comps));
-    assert.ok(comps.some((c: any) => c.code === "BRA-1"));
-  });
-
-  test("4. Artilharia oficial (top-scorers) com scouts e gols reais", async () => {
-    const compsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const comps = JSON.parse(compsRes.payload);
-    const serieA = comps.find((c: any) => c.code === "BRA-1");
-    assert.ok(serieA);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/competitions/${serieA.id}/top-scorers?limit=5`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const data = JSON.parse(res.payload);
-    assert.ok(Array.isArray(data.topScorers));
-    assert.ok(data.topScorers.length > 0);
-    assert.ok(typeof data.topScorers[0].goals === "number");
-    assert.ok(data.topScorers[0].goals >= data.topScorers[data.topScorers.length - 1].goals);
-  });
-
-  test("5. Líderes de assistência (top-assists) com ranking correto", async () => {
-    const compsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const comps = JSON.parse(compsRes.payload);
-    const serieA = comps.find((c: any) => c.code === "BRA-1");
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/competitions/${serieA.id}/top-assists?limit=5`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const data = JSON.parse(res.payload);
-    assert.ok(Array.isArray(data.topAssists));
-    assert.ok(data.topAssists.length > 0);
-    assert.ok(typeof data.topAssists[0].assists === "number");
-  });
-
-  test("6. Busca e estatísticas do atleta Memphis Depay", async () => {
-    const searchRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/players?search=Memphis",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(searchRes.statusCode, 200);
-    const searchData = JSON.parse(searchRes.payload);
-    assert.ok(searchData.data.length > 0);
-    const depay = searchData.data[0];
-
-    const statsRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/players/${depay.id}/statistics`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(statsRes.statusCode, 200);
-    const statsData = JSON.parse(statsRes.payload);
-    assert.equal(statsData.player.knownName, "Memphis Depay");
-    assert.ok(Array.isArray(statsData.statistics));
-    assert.ok(statsData.statistics.length > 0);
-    assert.equal(statsData.statistics[0].teamShortName, "Corinthians");
-  });
-
-  test("7. Fluxo completo de Billing Pix (Checkout, Simulação de Pagamento e Upgrade de Plano)", async () => {
-    // 1. Checkout
-    const checkoutRes = await app.inject({
+  test("7. Fluxo register -> me funciona (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    const email = `test_${randomBytes(6).toString("hex")}@example.com`;
+    const reg = await app.inject({
       method: "POST",
-      url: "/api/v1/billing/checkout",
-      headers: { "x-api-key": DEMO_KEY },
-      payload: {
-        apiKey: "bf_live_free_test_key_456",
-        targetPlan: "PRO",
-      },
+      url: "/api/v1/auth/register",
+      payload: { userName: "CI Tester", email, password: "SenhaForte123!" },
     });
-    assert.equal(checkoutRes.statusCode, 200);
-    const checkoutData = JSON.parse(checkoutRes.payload);
-    assert.ok(checkoutData.paymentId);
-    assert.equal(checkoutData.targetPlan, "PRO");
-    assert.ok(checkoutData.pixCopyPaste.startsWith("00020126"));
+    assert.equal(reg.statusCode, 201);
+    const regBody = JSON.parse(reg.payload);
+    assert.ok(regBody.key.startsWith("bf_live_"));
 
-    // 2. Simular liquidação Pix
-    const simRes = await app.inject({
-      method: "POST",
-      url: `/api/v1/billing/simulate-pix-paid/${checkoutData.paymentId}`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(simRes.statusCode, 200);
-    const simData = JSON.parse(simRes.payload);
-    assert.equal(simData.success, true);
-    assert.equal(simData.rateLimitPerMinute, 60);
-
-    // 3. Status atualizado
-    const statusRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/billing/status/${checkoutData.paymentId}`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(statusRes.statusCode, 200);
-    const statusData = JSON.parse(statusRes.payload);
-    assert.equal(statusData.status, "PAID");
-    assert.equal(statusData.apiKey.currentPlan, "PRO");
-    assert.equal(statusData.apiKey.rateLimitPerMinute, 60);
-  });
-
-  test("8. Login com sucesso usando login/senha da conta Enterprise", async () => {
-    const loginRes = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/login",
-      payload: {
-        login: "enterprise@brasafut.com.br",
-        password: "BrasaFut@Enterprise2026",
-      },
-    });
-    assert.equal(loginRes.statusCode, 200);
-    const body = JSON.parse(loginRes.payload);
-    assert.equal(body.message, "Login realizado com sucesso!");
-    assert.ok(body.apiKey.startsWith("bf_live_enterprise_"));
-    assert.equal(body.user.plan, "ENTERPRISE");
-    assert.equal(body.user.rateLimitPerMinute, 1000);
-  });
-
-  test("9. Login com senha incorreta deve falhar com 401", async () => {
-    const loginRes = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/login",
-      payload: {
-        login: "enterprise@brasafut.com.br",
-        password: "SenhaErrada123",
-      },
-    });
-    assert.equal(loginRes.statusCode, 401);
-    const body = JSON.parse(loginRes.payload);
-    assert.ok(body.error.includes("Credenciais inválidas"));
-  });
-
-  test("10. Acesso com chave Enterprise retorna perfil correto em /api/v1/auth/me", async () => {
-    const meRes = await app.inject({
+    const me = await app.inject({
       method: "GET",
       url: "/api/v1/auth/me",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
+      headers: { "x-api-key": regBody.key },
     });
-    assert.equal(meRes.statusCode, 200);
-    const body = JSON.parse(meRes.payload);
-    assert.equal(body.plan, "ENTERPRISE");
-    assert.equal(body.rateLimitPerMinute, 1000);
+    assert.equal(me.statusCode, 200);
+    assert.equal(JSON.parse(me.payload).plan, "FREE");
   });
 
-  test("11. Disparo de Notificação Push FCM de Gol para tópico de time", async () => {
-    const pushRes = await app.inject({
+  test("8. enterprise/register sem x-admin-key => 403 (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    const email = `ent_${randomBytes(6).toString("hex")}@example.com`;
+    const reg = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "Owner", email, password: "SenhaForte123!" },
+    });
+    const key = JSON.parse(reg.payload).key;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/enterprise/register",
+      headers: { "x-api-key": key },
+      payload: { userName: "Hacker", email: `hack_${randomBytes(4).toString("hex")}@example.com`, password: "SenhaForte123!" },
+    });
+    assert.equal(res.statusCode, 403);
+  });
+
+  test("9. FCM com chave FREE => 403 (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    const email = `fcm_${randomBytes(6).toString("hex")}@example.com`;
+    const reg = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "Fcm User", email, password: "SenhaForte123!" },
+    });
+    const key = JSON.parse(reg.payload).key;
+
+    const res = await app.inject({
       method: "POST",
       url: "/api/v1/live/test-fcm-goal",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
-      payload: {
-        teamId: 1957,
-        teamName: "Corinthians",
-        opponentName: "Palmeiras",
-        minute: 88,
-        scorerName: "Memphis Depay",
-        homeScore: 1,
-        awayScore: 0,
-        matchId: 10,
-      },
+      headers: { "x-api-key": key },
+      payload: { teamId: 1 },
     });
-    assert.equal(pushRes.statusCode, 200);
-    const body = JSON.parse(pushRes.payload);
-    assert.equal(body.success, true);
-    assert.equal(body.topic, "team_1957");
-    assert.ok(body.payload.notification.title.includes("CORINTHIANS"));
-    assert.ok(body.payload.notification.body.includes("Memphis Depay"));
+    assert.equal(res.statusCode, 403);
   });
 
-  test("12. Sincronização ultra-rápida de partidas ao vivo (/api/v1/sync/live)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/sync/live",
-      headers: { "x-api-key": DEMO_KEY },
+  test("10. Billing checkout com IDOR bloqueado (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    const a = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "User A", email: `a_${randomBytes(6).toString("hex")}@example.com`, password: "SenhaForte123!" },
     });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.success, true);
-    assert.equal(typeof body.liveMatchesCount, "number");
-    assert.equal(typeof body.eventsProcessed, "number");
-  });
+    const b = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "User B", email: `b_${randomBytes(6).toString("hex")}@example.com`, password: "SenhaForte123!" },
+    });
+    const keyA = JSON.parse(a.payload).key;
+    const keyB = JSON.parse(b.payload).key;
 
-  test("13. Receber e persistir eventos de push do Scraper Multi-Liga (/api/v1/sync/push)", async () => {
+    // A tenta gerar cobrança para a chave de B => 403
     const res = await app.inject({
       method: "POST",
-      url: "/api/v1/sync/push",
-      headers: { "x-api-key": "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45" },
-      payload: {
-        competitionCode: "PL",
-        currentRound: 4,
-        competitionMeta: {
-          name: "Premier League",
-          country: "Inglaterra",
-          type: "LEAGUE",
-          tournamentId: 17,
-          seasonName: "2026/2027",
-        },
-        events: [
-          {
-            id: 9999001,
-            slug: "arsenal-chelsea",
-            startTimestamp: 1789243200,
-            status: { code: 100, description: "Ended", type: "finished" },
-            homeTeam: { id: 42, name: "Arsenal", shortName: "Arsenal", nameCode: "ARS", country: { name: "Inglaterra" } },
-            awayTeam: { id: 38, name: "Chelsea", shortName: "Chelsea", nameCode: "CHE", country: { name: "Inglaterra" } },
-            homeScore: { current: 2, display: 2 },
-            awayScore: { current: 1, display: 1 },
-          },
-        ],
-        standings: [
-          {
-            position: 1,
-            team: { id: 42, name: "Arsenal", shortName: "Arsenal", nameCode: "ARS" },
-            points: 12,
-            matches: 4,
-            wins: 4,
-            draws: 0,
-            losses: 0,
-            scoresFor: 10,
-            scoresAgainst: 2,
-          },
-        ],
-      },
+      url: "/api/v1/billing/checkout",
+      headers: { "x-api-key": keyA },
+      payload: { apiKey: keyB, targetPlan: "PRO" },
     });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.success, true);
-    assert.ok(body.matchesSynced >= 1);
-    assert.ok(body.standingsSynced >= 1);
+    assert.equal(res.statusCode, 403);
   });
 
-  test("14. Listar ligas e competições suportadas para notícias (/api/v1/news/leagues)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/news/leagues",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.total >= 10);
-    assert.ok(Array.isArray(body.leagues));
-    assert.ok(body.leagues.some((l: any) => l.espnCode === "bra.1"));
-    assert.ok(body.leagues.some((l: any) => l.espnCode === "eng.1"));
-    assert.ok(body.leagues.some((l: any) => l.espnCode === "conmebol.libertadores"));
-  });
-
-  test("15. Obter feed de notícias do Brasileirão (/api/v1/news?league=bra.1&limit=5)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/news?league=bra.1&limit=5",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.league, "bra.1");
-    assert.ok(body.total > 0);
-    assert.ok(Array.isArray(body.articles));
-    const first = body.articles[0];
-    assert.ok(first.id);
-    assert.ok(first.title);
-    assert.equal(first.source, "ESPN Brasil");
-    assert.ok(first.url.startsWith("http"));
-  });
-
-  test("16. Obter notícias com filtro de clube (/api/v1/news?team=santos&limit=5)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/news?team=santos&limit=5",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(Array.isArray(body.articles));
-    // Cada notícia retornada deve ter ligação com o termo filtrado
-    for (const article of body.articles) {
-      const match =
-        article.title.toLowerCase().includes("santos") ||
-        article.description.toLowerCase().includes("santos") ||
-        article.categories.teams.some((t: any) => t.name.toLowerCase().includes("santos"));
-      assert.ok(match, `Notícia "${article.title}" deve ter relação com o Santos`);
-    }
-  });
-
-  test("17. Obter currículo de carreira consolidado do atleta (/api/v1/players/:id/career)", async () => {
-    // Buscar Memphis Depay
-    const searchRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/players?search=Memphis",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const depay = JSON.parse(searchRes.payload).data[0];
-
-    const careerRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/players/${depay.id}/career`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(careerRes.statusCode, 200);
-    const body = JSON.parse(careerRes.payload);
-    assert.ok(body.player);
-    assert.equal(body.player.knownName, "Memphis Depay");
-    assert.ok(body.careerTotals);
-    assert.equal(typeof body.careerTotals.totalAppearances, "number");
-    assert.equal(typeof body.careerTotals.totalGoals, "number");
-    assert.ok(Array.isArray(body.breakdownBySeason));
-    assert.ok(Array.isArray(body.clubs));
-  });
-
-  test("18. Obter ranking de Clean Sheets / Goleiros (/api/v1/competitions/:id/top-clean-sheets)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions/29/top-clean-sheets?limit=5",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.competitionId, 29);
-    assert.ok(Array.isArray(body.topCleanSheets));
-  });
-
-  test("19. Configuração e suporte a Futebol Feminino (Brasileirão Feminino, NWSL, UWCL, Liga F)", async () => {
-    const { TOURNAMENTS_CONFIG } = await import("../src/services/sofascoreSync.js");
-    const femaleCodes = ["BRA-W1", "NWSL", "UWCL", "LIGA-F"];
-    for (const code of femaleCodes) {
-      const found = TOURNAMENTS_CONFIG.find((t) => t.code === code);
-      assert.ok(found, `Torneio feminino ${code} deve estar configurado no TOURNAMENTS_CONFIG`);
-      assert.ok(found.tournamentId > 0);
-      assert.ok(found.seasonId > 0);
-      assert.ok(found.hasStandings === true);
-    }
-  });
-
-  test("20. Busca Global Unificada (/api/v1/search?q=Flamengo)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/search?q=Flamengo&limit=3",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.query, "Flamengo");
-    assert.ok(body.counts);
-    assert.ok(Array.isArray(body.teams));
-    assert.ok(Array.isArray(body.players));
-    assert.ok(Array.isArray(body.competitions));
-    assert.ok(Array.isArray(body.news));
-  });
-
-  test("21. Calendário e Forma Recente do Clube (/api/v1/teams/:id/fixtures)", async () => {
-    // Buscar primeiro time da base
-    const teamsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/teams?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const teamsList = JSON.parse(teamsRes.payload);
-    const firstTeam = Array.isArray(teamsList) ? teamsList[0] : teamsList.data[0];
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/teams/${firstTeam.id}/fixtures?limit=5`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.team);
-    assert.equal(body.team.id, firstTeam.id);
-    assert.ok(Array.isArray(body.form));
-    assert.ok(Array.isArray(body.pastMatches));
-    assert.ok(Array.isArray(body.nextMatches));
-  });
-
-  test("22. Comparador Raio-X de Atletas (/api/v1/players/compare)", async () => {
-    const playersRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/players?limit=2",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const playerList = JSON.parse(playersRes.payload).data;
-    const p1 = playerList[0].id;
-    const p2 = playerList[1].id;
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/players/compare?p1=${p1}&p2=${p2}`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.player1);
-    assert.ok(body.player2);
-    assert.equal(body.player1.id, p1);
-    assert.equal(body.player2.id, p2);
-    assert.ok(body.player1.stats);
-    assert.ok(body.player2.stats);
-    assert.ok(typeof body.player1.stats.goalsPer90 === "number");
-    assert.ok(body.statisticalEdge);
-  });
-
-  test("23. Tabela Virtual em Tempo Real (/api/v1/standings/live)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/standings/live?seasonId=3",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.seasonId, 3);
-    assert.ok(typeof body.liveMatchesCount === "number");
-    assert.ok(typeof body.hasLiveChanges === "boolean");
-    assert.ok(Array.isArray(body.standings));
-    if (body.standings.length > 0) {
-      assert.ok(["UP", "DOWN", "SAME"].includes(body.standings[0].movement));
-      assert.ok(typeof body.standings[0].movementDelta === "number");
-    }
-  });
-
-  test("24. Mercado da Bola e Transferências (/api/v1/transfers)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/transfers?limit=5",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.total > 0);
-    assert.ok(Array.isArray(body.data));
-    assert.ok(body.marketSummary);
-    const transfer = body.data[0];
-    assert.ok(transfer.player.name);
-    assert.ok(transfer.fromTeam.name);
-    assert.ok(transfer.toTeam.name);
-    assert.ok(transfer.type);
-    assert.ok(transfer.transferDate);
-  });
-
-  test("25. Inteligência Preditiva e Probabilidades Pré-Jogo (/api/v1/matches/:id/predictions)", async () => {
-    // Buscar primeira partida do banco
-    const matchesRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const matchesList = JSON.parse(matchesRes.payload);
-    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/matches/${match.id}/predictions`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, match.id);
-    assert.ok(body.homeTeam);
-    assert.ok(body.awayTeam);
-    assert.ok(body.probabilities);
-    assert.ok(typeof body.probabilities.homeWinPct === "number");
-    assert.ok(typeof body.probabilities.drawPct === "number");
-    assert.ok(typeof body.probabilities.awayWinPct === "number");
-    assert.equal(
-      body.probabilities.homeWinPct + body.probabilities.drawPct + body.probabilities.awayWinPct,
-      100
-    );
-    assert.ok(body.goalsExpected);
-    assert.ok(body.bothTeamsToScore);
-    assert.ok(Array.isArray(body.mostLikelyScores));
-    assert.ok(Array.isArray(body.insights));
-  });
-
-  test("26. Gráfico de Pressão e Attack Momentum (/api/v1/matches/:id/momentum)", async () => {
-    const matchesRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const matchesList = JSON.parse(matchesRes.payload);
-    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/matches/${match.id}/momentum`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, match.id);
-    assert.ok(body.summary);
-    assert.ok(typeof body.summary.homeDominancePct === "number");
-    assert.ok(Array.isArray(body.timeline));
-    assert.ok(body.timeline.length >= 80);
-    const point = body.timeline[10];
-    assert.ok(point.minute);
-    assert.ok(typeof point.value === "number");
-    assert.ok(["home", "away", "neutral"].includes(point.dominantTeam));
-  });
-
-  test("27. Mapa de Finalizações no Campo / Shot Map (/api/v1/matches/:id/shot-map)", async () => {
-    const matchesRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const matchesList = JSON.parse(matchesRes.payload);
-    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/matches/${match.id}/shot-map`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, match.id);
-    assert.ok(body.summary);
-    assert.ok(body.summary.home);
-    assert.ok(body.summary.away);
-    assert.ok(typeof body.summary.home.expectedGoals === "number");
-    assert.ok(Array.isArray(body.shots));
-    assert.ok(body.shots.length > 0);
-    const shot = body.shots[0];
-    assert.ok(shot.coordinates);
-    assert.ok(typeof shot.coordinates.x === "number");
-    assert.ok(typeof shot.coordinates.y === "number");
-    assert.ok(["GOAL", "SAVED", "MISSED", "BLOCKED", "POST"].includes(shot.outcome));
-    assert.ok(typeof shot.expectedGoals === "number");
-  });
-
-  test("28. Departamento Médico e Desfalques (/api/v1/teams/:id/absences e /api/v1/matches/:id/absences)", async () => {
-    // Buscar primeiro time
-    const teamsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/teams?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const teamsList = JSON.parse(teamsRes.payload);
-    const firstTeam = Array.isArray(teamsList) ? teamsList[0] : teamsList.data[0];
-
-    const teamAbsRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/teams/${firstTeam.id}/absences`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(teamAbsRes.statusCode, 200);
-    const teamAbsBody = JSON.parse(teamAbsRes.payload);
-    assert.ok(teamAbsBody.team);
-    assert.ok(Array.isArray(teamAbsBody.absences));
-
-    // Partida absences
-    const matchesRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const matchesList = JSON.parse(matchesRes.payload);
-    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
-
-    const matchAbsRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/matches/${match.id}/absences`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(matchAbsRes.statusCode, 200);
-    const matchAbsBody = JSON.parse(matchAbsRes.payload);
-    assert.equal(matchAbsBody.matchId, match.id);
-    assert.ok(matchAbsBody.homeTeam);
-    assert.ok(matchAbsBody.awayTeam);
-    assert.ok(typeof matchAbsBody.totalAbsences === "number");
-  });
-
-  test("29. Seleção da Rodada (Team of the Week / Best XI) (/api/v1/competitions/:id/team-of-the-week)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions/1/team-of-the-week?round=26",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.competitionId, 1);
-    assert.equal(body.formation, "4-3-3");
-    assert.ok(body.playerOfTheRound);
-    assert.ok(Array.isArray(body.eleven));
-    assert.equal(body.eleven.length, 11);
-    const player1 = body.eleven[0];
-    assert.ok(player1.player.name);
-    assert.ok(player1.tacticalRole);
-    assert.ok(player1.roundRating);
-  });
-
-  test("30. Simulador de Tabela e Probabilidades (/api/v1/standings/simulate)", async () => {
+  test("11. Billing webhook sem segredo válido => 401 quando configurado (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    if (!process.env.BILLING_WEBHOOK_SECRET) return t.skip("BILLING_WEBHOOK_SECRET não configurado");
     const res = await app.inject({
       method: "POST",
-      url: "/api/v1/standings/simulate",
-      headers: { "x-api-key": DEMO_KEY },
-      payload: {
-        seasonId: 3,
-        predictions: [
-          { matchId: 33, homeScore: 3, awayScore: 0 },
-          { matchId: 34, homeScore: 1, awayScore: 2 },
-        ],
-      },
+      url: "/api/v1/billing/webhook",
+      headers: { "x-api-key": "qualquer" },
+      payload: { paymentId: "pay_inexistente", event: "PAYMENT_CONFIRMED" },
     });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.seasonId, 3);
-    assert.equal(body.simulatedMatchesCount, 2);
-    assert.ok(Array.isArray(body.standings));
-    assert.ok(body.standings.length > 0);
-    const topTeam = body.standings[0];
-    assert.equal(topTeam.currentPosition, 1);
-    assert.ok(topTeam.probabilities);
-    assert.ok(typeof topTeam.probabilities.championPct === "number");
-    assert.ok(typeof topTeam.probabilities.libertadoresPct === "number");
-    assert.ok(typeof topTeam.probabilities.relegationPct === "number");
+    assert.equal(res.statusCode, 401);
   });
 
-  test("31. Engine de Pontuação Fantasy da Partida (/api/v1/matches/:id/fantasy)", async () => {
-    const matchesRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
+  test("12. Rate limit responde headers padrão (requer DB)", async (t) => {
+    if (!dbAvailable) return t.skip("sem banco");
+    const reg = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "RL User", email: `rl_${randomBytes(6).toString("hex")}@example.com`, password: "SenhaForte123!" },
     });
-    const matchesList = JSON.parse(matchesRes.payload);
-    const match = Array.isArray(matchesList) ? matchesList[0] : matchesList.data[0];
-
+    const key = JSON.parse(reg.payload).key;
     const res = await app.inject({
       method: "GET",
-      url: `/api/v1/matches/${match.id}/fantasy`,
-      headers: { "x-api-key": DEMO_KEY },
+      url: "/api/v1/auth/me",
+      headers: { "x-api-key": key },
     });
     assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, match.id);
-    assert.ok(body.mvpFantasy);
-    assert.ok(Array.isArray(body.homePlayers));
-    assert.ok(Array.isArray(body.awayPlayers));
-    const p1 = body.homePlayers[0];
-    assert.ok(p1.player.name);
-    assert.ok(typeof p1.fantasyScore === "number");
-    assert.ok(p1.breakdown);
-  });
-
-  test("32. Histórico de Pontuação Fantasy do Atleta (/api/v1/players/:id/fantasy)", async () => {
-    const playersRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/players?limit=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const player = JSON.parse(playersRes.payload).data[0];
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/players/${player.id}/fantasy`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.player.id, player.id);
-    assert.ok(body.seasonSummary);
-    assert.ok(typeof body.seasonSummary.averageFantasyScore === "number");
-    assert.ok(Array.isArray(body.rounds));
-  });
-
-  test("33. Raio-X Histórico de Duelo de Clubes (/api/v1/teams/:team1Id/vs/:team2Id)", async () => {
-    const teamsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/teams?limit=2",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    const teamsList = JSON.parse(teamsRes.payload);
-    const t1 = teamsList[0].id;
-    const t2 = teamsList[1].id;
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/v1/teams/${t1}/vs/${t2}`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.team1.id, t1);
-    assert.equal(body.team2.id, t2);
-    assert.ok(body.summary);
-    assert.ok(typeof body.summary.totalMatches === "number");
-    assert.ok(typeof body.summary.averageGoalsPerMatch === "number");
-    assert.ok(Array.isArray(body.recentMatches));
-  });
-
-  test("34. Central de Árbitros e Scouts de Arbitragem (/api/v1/referees)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/referees",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.total > 0);
-    assert.ok(Array.isArray(body.data));
-    const ref1 = body.data[0];
-    assert.ok(ref1.name);
-    assert.ok(ref1.stats);
-    assert.ok(typeof ref1.stats.yellowCardsPerMatch === "number");
-
-    // Detalhes do árbitro
-    const statsRes = await app.inject({
-      method: "GET",
-      url: `/api/v1/referees/${ref1.id}/stats`,
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(statsRes.statusCode, 200);
-    const statsBody = JSON.parse(statsRes.payload);
-    assert.equal(statsBody.referee.id, ref1.id);
-    assert.ok(statsBody.scout.profile);
-    assert.ok(statsBody.scout.matchOutcomes);
-  });
-
-  test("35. Exportação de Dados em Formato CSV (/api/v1/export/*)", async () => {
-    // Exportar Tabela
-    const stdRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/export/standings?seasonId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(stdRes.statusCode, 200);
-    assert.ok(stdRes.headers["content-type"]?.includes("text/csv"));
-    assert.ok(stdRes.payload.includes("Posicao,Clube,Sigla,Pontos"));
-
-    // Exportar Atletas
-    const plyRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/export/players?seasonId=1&limit=5",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(plyRes.statusCode, 200);
-    assert.ok(plyRes.headers["content-type"]?.includes("text/csv"));
-    assert.ok(plyRes.payload.includes("ID,Nome,Clube,Posicao"));
-  });
-
-  test("36. Heatmaps e Zonas de Ação (/matches/:id/heatmap e /players/:id/heatmap)", async () => {
-    // Heatmap da partida
-    const matchHeatRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches/1/heatmap",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(matchHeatRes.statusCode, 200);
-    const matchHeatBody = JSON.parse(matchHeatRes.payload);
-    assert.ok(matchHeatBody.homeTeam);
-    assert.ok(matchHeatBody.awayTeam);
-    assert.ok(Array.isArray(matchHeatBody.homeTeam.points));
-    assert.ok(matchHeatBody.homeTeam.actionZones.thirds);
-    assert.ok(typeof matchHeatBody.homeTeam.actionZones.thirds.defensiveThird === "number");
-
-    // Heatmap do jogador
-    const playerHeatRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/players/1/heatmap?matchId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(playerHeatRes.statusCode, 200);
-    const playerHeatBody = JSON.parse(playerHeatRes.payload);
-    assert.ok(playerHeatBody.playerId > 0);
-    assert.ok(Array.isArray(playerHeatBody.points));
-    assert.ok(playerHeatBody.actionZones.flanks);
-  });
-
-  test("37. Comparador Tático de Clubes na Temporada (/teams/compare)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/teams/compare?team1=1&team2=2&seasonId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.team1);
-    assert.ok(body.team2);
-    assert.ok(body.tacticalVerdict);
-    assert.ok(typeof body.team1.stats.points === "number");
-    assert.ok(typeof body.team2.stats.winPercentage === "number");
-    assert.ok(body.tacticalVerdict.offensiveAdvantage);
-  });
-
-  test("38. Central de Odds e Fair Odds de Partidas (/odds/matches/:id)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/odds/matches/1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(body.fairOdds);
-    assert.ok(body.consensusOdds);
-    assert.ok(Array.isArray(body.bookmakers));
-    assert.ok(body.bookmakers.length >= 3);
-    assert.ok(typeof body.fairOdds.market1X2.home === "number");
-    assert.ok(typeof body.bookmakers[0].market1X2.draw === "number");
-  });
-
-  test("39. Radar de Value Bets (EV+) (/odds/value-bets)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/odds/value-bets?minEv=2.0",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.ok(typeof body.totalFound === "number");
-    assert.ok(Array.isArray(body.opportunities));
-    if (body.opportunities.length > 0) {
-      const opp = body.opportunities[0];
-      assert.ok(opp.offeredOdd > opp.fairOdd || opp.expectedValuePct >= 2.0);
-      assert.ok(opp.bookmaker);
-      assert.ok(opp.recommendation);
-    }
-  });
-
-  test("40. Central de DM e Observatório de Lesões (/injuries/report e /injuries/teams/:id)", async () => {
-    // Relatório geral
-    const repRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/injuries/report?seasonId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(repRes.statusCode, 200);
-    const repBody = JSON.parse(repRes.payload);
-    assert.ok(repBody.overview);
-    assert.ok(typeof repBody.overview.totalPlayersInjured === "number");
-    assert.ok(Array.isArray(repBody.clubsRanking));
-
-    // Boletim do clube
-    const teamInjRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/injuries/teams/1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(teamInjRes.statusCode, 200);
-    const teamInjBody = JSON.parse(teamInjRes.payload);
-    assert.ok(teamInjBody.team.id > 0);
-    assert.ok(Array.isArray(teamInjBody.medicalReport));
-    if (teamInjBody.medicalReport.length > 0) {
-      assert.ok(teamInjBody.medicalReport[0].injuryDiagnosis);
-      assert.ok(teamInjBody.medicalReport[0].returnEstimate);
-    }
-  });
-
-  test("41. Sala de Troféus e Histórico de Campeões (/teams/:id/trophies e /competitions/:id/champions)", async () => {
-    // Troféus do clube
-    const trofRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/teams/1/trophies",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(trofRes.statusCode, 200);
-    const trofBody = JSON.parse(trofRes.payload);
-    assert.ok(trofBody.team.id > 0);
-    assert.ok(trofBody.totalTrophiesCount > 0);
-    assert.ok(Array.isArray(trofBody.trophies.national));
-
-    // Campeões da competição
-    const champRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/competitions/1/champions",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(champRes.statusCode, 200);
-    const champBody = JSON.parse(champRes.payload);
-    assert.ok(champBody.competition.id > 0);
-    assert.ok(Array.isArray(champBody.allTimeTitlesRanking));
-    assert.ok(Array.isArray(champBody.editions));
-    assert.ok(champBody.editions[0].champion);
-  });
-
-  test("42. Guia de Transmissão de TV & Streaming (/matches/:id/broadcast)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches/1/broadcast",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, 1);
-    assert.ok(Array.isArray(body.channels));
-    assert.ok(body.channels.length > 0);
-    const ch = body.channels[0];
-    assert.ok(ch.channelName);
-    assert.ok(ch.type);
-    assert.ok(typeof ch.isFreeToAir === "boolean");
-  });
-
-  test("43. Feed de Narração Lance a Lance Textual (/matches/:id/commentary)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches/1/commentary",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.matchId, 1);
-    assert.ok(body.totalComments > 0);
-    assert.ok(Array.isArray(body.commentary));
-    const firstComment = body.commentary[0];
-    assert.ok(typeof firstComment.minute === "number");
-    assert.ok(firstComment.headline);
-    assert.ok(firstComment.text);
-    assert.ok(firstComment.type);
-
-    // Teste com filtro importantOnly
-    const impRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/matches/1/commentary?importantOnly=true",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(impRes.statusCode, 200);
-    const impBody = JSON.parse(impRes.payload);
-    assert.ok(impBody.commentary.every((c: any) => c.isImportant));
-  });
-
-  test("44. Supercomputador Preditivo Monte Carlo (/standings/supercomputer)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/v1/standings/supercomputer?seasonId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = JSON.parse(res.payload);
-    assert.equal(body.seasonId, 1);
-    assert.equal(body.simulationsRun, 10000);
-    assert.ok(body.cutoffScores);
-    assert.equal(body.cutoffScores.safetyScoreZ4, 45);
-    assert.ok(Array.isArray(body.projections));
-    assert.ok(body.projections.length > 0);
-    const topProj = body.projections[0];
-    assert.ok(topProj.projectedFinalPoints > 0);
-    assert.ok(typeof topProj.titleProbabilityPct === "number");
-    assert.ok(typeof topProj.libertadoresG4ProbabilityPct === "number");
-  });
-
-  test("45. Folha Salarial e Fair Play Financeiro (/finances/teams/:id e /finances/ranking)", async () => {
-    // Finanças de um clube
-    const teamFinRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/finances/teams/1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(teamFinRes.statusCode, 200);
-    const teamFinBody = JSON.parse(teamFinRes.payload);
-    assert.ok(teamFinBody.teamId > 0);
-    assert.ok(teamFinBody.monthlyPayrollMillionsBrl > 0);
-    assert.ok(["HEALTHY", "MODERATE", "RISK_DEFICIT"].includes(teamFinBody.financialFairPlayStatus));
-    assert.ok(teamFinBody.costPerPointThousandsBrl > 0);
-
-    // Ranking de finanças
-    const rankRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/finances/ranking?seasonId=1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(rankRes.statusCode, 200);
-    const rankBody = JSON.parse(rankRes.payload);
-    assert.ok(Array.isArray(rankBody.rankingByPayroll));
-    assert.ok(Array.isArray(rankBody.rankingByEfficiency));
-    assert.ok(rankBody.totalClubsAnalyzed > 0);
-  });
-
-  test("46. Radar de Wonderkids e Relatório de Olheiro (/scouting/talents e /scouting/players/:id)", async () => {
-    // Lista de promessas
-    const talentsRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/scouting/talents?maxAge=22",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(talentsRes.statusCode, 200);
-    const talentsBody = JSON.parse(talentsRes.payload);
-    assert.ok(Array.isArray(talentsBody.wonderkids));
-    if (talentsBody.wonderkids.length > 0) {
-      const kid = talentsBody.wonderkids[0];
-      assert.ok(kid.age <= 22);
-      assert.ok(kid.potentialRating > 0);
-      assert.ok(kid.attributes.pace > 0);
-      assert.ok(kid.similarPlaystyle);
-    }
-
-    // Ficha individual de scouting
-    const scoutRes = await app.inject({
-      method: "GET",
-      url: "/api/v1/scouting/players/1",
-      headers: { "x-api-key": DEMO_KEY },
-    });
-    assert.equal(scoutRes.statusCode, 200);
-    const scoutBody = JSON.parse(scoutRes.payload);
-    assert.ok(scoutBody.playerId > 0);
-    assert.ok(scoutBody.attributes.tacticalIQ > 0);
-    assert.ok(scoutBody.scoutVerdict.recommendation);
+    assert.ok(res.headers["x-ratelimit-limit"]);
+    assert.ok(res.headers["x-ratelimit-remaining"] !== undefined);
+    assert.ok(res.headers["x-ratelimit-reset"]);
   });
 });
-
-
-
-

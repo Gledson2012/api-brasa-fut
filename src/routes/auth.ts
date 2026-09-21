@@ -210,14 +210,14 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     }
   );
 
-  // Criar ou atualizar conta Enterprise
+  // Criar ou atualizar conta Enterprise (RESTRITO: requer x-admin-key / ADMIN_SECRET)
   app.post(
     "/enterprise/register",
     {
       schema: {
         tags: ["Autenticação & Planos"],
-        summary: "Criar ou configurar conta do plano ENTERPRISE",
-        description: "Cria uma conta Enterprise com taxa de 1.000 requisições por minuto e suporte total.",
+        summary: "Criar ou configurar conta do plano ENTERPRISE (admin)",
+        description: "Restrito a administradores via cabeçalho 'x-admin-key'. Cria uma conta Enterprise com taxa de 1.000 requisições por minuto.",
         body: z.object({
           userName: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
           email: z.string().email("E-mail inválido"),
@@ -232,11 +232,20 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
             plan: z.enum(["FREE", "PRO", "ENTERPRISE"]),
             rateLimitPerMinute: z.number(),
           }),
+          403: z.object({ error: z.string() }),
           409: z.object({ error: z.string() }),
         },
       },
     },
     async (request, reply) => {
+      const adminSecret = process.env.ADMIN_SECRET;
+      const adminHeader = request.headers["x-admin-key"];
+      if (!adminSecret || adminHeader !== adminSecret) {
+        return reply.status(403).send({
+          error: "Acesso Negado. Esta operação requer 'x-admin-key' de administrador.",
+        });
+      }
+
       const { userName, email, password } = request.body;
       const cleanEmail = email.toLowerCase().trim();
 
@@ -325,155 +334,23 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     }
   );
 
-  // Endpoint de migração de banco (adiciona password_hash e conta Enterprise)
+  // Endpoint de migração removido por segurança (410 Gone).
+  // Migrações DDL e seed administrativo devem rodar via CLI: `npm run db:migrate`
+  // ou `tsx scripts/migrate-prod.ts` com ADMIN_SECRET. Nunca expor DDL via HTTP.
   app.get(
     "/migrate-db",
     {
       schema: {
         tags: ["Autenticação & Planos"],
-        summary: "Executar migração de colunas e dados no banco de dados",
+        summary: "Removido por segurança (use CLI com ADMIN_SECRET)",
       },
     },
-    async () => {
-      const { client } = await import("../db/index.js");
-
-      // 1. Criar coluna password_hash se não existir
-      await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
-
-      // 2. Garantir conta ENTERPRISE
-      const passHash = hashPassword("BrasaFut@Enterprise2026");
-      const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
-
-      await client`
-        INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
-        VALUES ('enterprise_admin', 'enterprise@brasafut.com.br', ${passHash}, ${key}, 'ENTERPRISE', 1000, true)
-        ON CONFLICT (email) DO UPDATE SET
-          user_name = EXCLUDED.user_name,
-          password_hash = EXCLUDED.password_hash,
-          key = EXCLUDED.key,
-          plan = 'ENTERPRISE',
-          rate_limit_per_minute = 1000,
-          is_active = true,
-          updated_at = NOW();
-      `;
-
-      // 3. Garantir tabela player_season_statistics com todas as colunas de scouts
-      await client.unsafe(`
-        CREATE TABLE IF NOT EXISTS player_season_statistics (
-          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-          season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
-          team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-          appearances INTEGER DEFAULT 0 NOT NULL,
-          matches_started INTEGER DEFAULT 0 NOT NULL,
-          minutes_played INTEGER DEFAULT 0 NOT NULL,
-          goals INTEGER DEFAULT 0 NOT NULL,
-          assists INTEGER DEFAULT 0 NOT NULL,
-          yellow_cards INTEGER DEFAULT 0 NOT NULL,
-          red_cards INTEGER DEFAULT 0 NOT NULL,
-          rating VARCHAR(10) DEFAULT '0.0',
-          expected_goals VARCHAR(10) DEFAULT '0.0',
-          expected_assists VARCHAR(10) DEFAULT '0.0',
-          shots_total INTEGER DEFAULT 0 NOT NULL,
-          shots_on_target INTEGER DEFAULT 0 NOT NULL,
-          key_passes INTEGER DEFAULT 0 NOT NULL,
-          clean_sheets INTEGER DEFAULT 0 NOT NULL,
-          saves INTEGER DEFAULT 0 NOT NULL,
-          goals_conceded INTEGER DEFAULT 0 NOT NULL,
-          penalty_saves INTEGER DEFAULT 0 NOT NULL,
-          updated_at TIMESTAMPTZ DEFAULT NOW(),
-          CONSTRAINT uq_player_season_stat UNIQUE (player_id, season_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_player_season_goals ON player_season_statistics (season_id, goals);
-        CREATE INDEX IF NOT EXISTS idx_player_season_assists ON player_season_statistics (season_id, assists);
-        CREATE INDEX IF NOT EXISTS idx_player_season_clean_sheets ON player_season_statistics (season_id, clean_sheets);
-
-        DO $$ BEGIN
-          CREATE TYPE payment_status AS ENUM ('PENDING', 'PAID', 'EXPIRED', 'CANCELLED');
-        EXCEPTION
-          WHEN duplicate_object THEN null;
-        END $$;
-
-        CREATE TABLE IF NOT EXISTS payments (
-          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          api_key_id BIGINT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
-          payment_id VARCHAR(64) NOT NULL UNIQUE,
-          target_plan api_plan NOT NULL,
-          amount_cents INTEGER NOT NULL,
-          status payment_status DEFAULT 'PENDING' NOT NULL,
-          pix_qr_code TEXT NOT NULL,
-          pix_copy_paste TEXT NOT NULL,
-          expires_at TIMESTAMPTZ NOT NULL,
-          paid_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS transfers (
-          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
-          player_name VARCHAR(150) NOT NULL,
-          from_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
-          from_team_name VARCHAR(120) NOT NULL,
-          to_team_id BIGINT REFERENCES teams(id) ON DELETE SET NULL,
-          to_team_name VARCHAR(120) NOT NULL,
-          type VARCHAR(50) DEFAULT 'PERMANENT' NOT NULL,
-          transfer_date DATE NOT NULL,
-          fee_amount VARCHAR(50),
-          market_value VARCHAR(50),
-          contract_until DATE,
-          position VARCHAR(50),
-          photo_url TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_transfers_player_id ON transfers (player_id);
-        CREATE INDEX IF NOT EXISTS idx_transfers_from_team_id ON transfers (from_team_id);
-        CREATE INDEX IF NOT EXISTS idx_transfers_to_team_id ON transfers (to_team_id);
-        CREATE INDEX IF NOT EXISTS idx_transfers_date ON transfers (transfer_date);
-
-        CREATE TABLE IF NOT EXISTS team_absences (
-          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-          player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
-          player_name VARCHAR(150) NOT NULL,
-          position VARCHAR(50),
-          type VARCHAR(50) NOT NULL,
-          reason VARCHAR(255) NOT NULL,
-          expected_return VARCHAR(100),
-          status VARCHAR(50) DEFAULT 'OUT' NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_team_absences_team_id ON team_absences (team_id);
-        CREATE INDEX IF NOT EXISTS idx_team_absences_player_id ON team_absences (player_id);
-
-        CREATE TABLE IF NOT EXISTS referees (
-          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          name VARCHAR(150) NOT NULL,
-          nationality VARCHAR(100) DEFAULT 'Brasil' NOT NULL,
-          federation VARCHAR(100) DEFAULT 'CBF / FIFA',
-          matches_count INTEGER DEFAULT 0 NOT NULL,
-          yellow_cards_total INTEGER DEFAULT 0 NOT NULL,
-          red_cards_total INTEGER DEFAULT 0 NOT NULL,
-          fouls_avg VARCHAR(10) DEFAULT '27.4',
-          penalties_total INTEGER DEFAULT 0 NOT NULL,
-          home_win_pct INTEGER DEFAULT 48 NOT NULL,
-          away_win_pct INTEGER DEFAULT 26 NOT NULL,
-          draw_pct INTEGER DEFAULT 26 NOT NULL,
-          photo_url TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_referees_name ON referees (name);
-      `);
-
-      return {
-        success: true,
-        message: "Migração do banco de dados e conta ENTERPRISE configurada com sucesso!",
-        login: "enterprise@brasafut.com.br",
-        userName: "enterprise_admin",
-        plan: "ENTERPRISE",
-        rateLimitPerMinute: 1000,
-        apiKey: key,
-      };
+    async (_request, reply) => {
+      return reply.status(410).send({
+        error: "Gone",
+        message:
+          "Este endpoint foi removido por segurança. Execute migrações via CLI (scripts/migrate-prod.ts) com ADMIN_SECRET.",
+      });
     }
   );
 };

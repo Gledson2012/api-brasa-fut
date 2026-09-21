@@ -7,7 +7,8 @@ import { requireAdminOrPlan } from "../middleware/auth.js";
 const execFileAsync = promisify(execFile);
 
 export const syncRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/debug", async () => {
+  app.get("/debug", async (request, reply) => {
+    if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
     const results: any = {};
     try {
       const { stdout } = await execFileAsync("curl", ["--version"]);
@@ -42,6 +43,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
       const { liveOnly, force, leagues } = (request.query || {}) as {
         liveOnly?: string;
         force?: string;
@@ -63,7 +65,8 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
         summary: "Sincronização ultra-rápida (sub-segundo) apenas das partidas ao vivo",
       },
     },
-    async () => {
+    async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
       const result = await SofascoreSyncService.syncLiveMatchesDirect();
       return result;
     }
@@ -74,10 +77,11 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Sincronização"],
-        summary: "Atualizar escudos legados para o CDN oficial do Sofascore",
+        summary: "Atualizar escudos legados para o CDN oficial do Sofascore (admin)",
       },
     },
-    async () => {
+    async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
       const { client } = await import("../db/index.js");
       const updates = [
         { name: "Flamengo", id: 5981 },
@@ -110,42 +114,16 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Sincronização"],
-        summary: "Configurar conta ENTERPRISE e migrar tabela api_keys",
+        summary: "Removido por segurança (use CLI com ADMIN_SECRET)",
       },
     },
-    async () => {
-      const { client } = await import("../db/index.js");
-      const { hashPassword } = await import("../utils/password.js");
-
-      // 1. Garantir que a coluna password_hash existe
-      await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
-
-      const passHash = hashPassword("BrasaFut@Enterprise2026");
-      const key = "bf_live_enterprise_9f83a21c45e87b60d4e92a11bf738e45";
-
-      // 2. Upsert conta ENTERPRISE
-      await client`
-        INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)
-        VALUES ('enterprise_admin', 'enterprise@brasafut.com.br', ${passHash}, ${key}, 'ENTERPRISE', 1000, true)
-        ON CONFLICT (email) DO UPDATE SET
-          user_name = EXCLUDED.user_name,
-          password_hash = EXCLUDED.password_hash,
-          key = EXCLUDED.key,
-          plan = 'ENTERPRISE',
-          rate_limit_per_minute = 1000,
-          is_active = true,
-          updated_at = NOW();
-      `;
-
-      return {
-        success: true,
-        message: "Conta ENTERPRISE configurada e sincronizada com sucesso!",
-        email: "enterprise@brasafut.com.br",
-        userName: "enterprise_admin",
-        plan: "ENTERPRISE",
-        rateLimitPerMinute: 1000,
-        apiKey: key,
-      };
+    async (_request, reply) => {
+      return reply.status(410).send({
+        success: false,
+        error: "Gone",
+        message:
+          "Removido por segurança. Use `tsx scripts/migrate-prod.ts` com ADMIN_SECRET para seed administrativo.",
+      });
     }
   );
 

@@ -51,8 +51,9 @@ export const liveRoutes: FastifyPluginAsync = async (app) => {
     return result;
   });
 
-  // Disparar teste de Notificação Push FCM para o time (ex: /topics/team_1957)
+  // Disparar teste de Notificação Push FCM para o time (RESTRITO: ENTERPRISE, anti-abuso de custo)
   app.post("/test-fcm-goal", async (request, reply) => {
+    if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
     const body = (request.body as {
       teamId?: number;
       teamName?: string;
@@ -80,8 +81,9 @@ export const liveRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(result);
   });
 
-  // Disparar mensagem personalizada para qualquer tópico arbitrário
+  // Disparar mensagem personalizada para tópico arbitrário (RESTRITO: ENTERPRISE)
   app.post("/test-fcm-topic", async (request, reply) => {
+    if (!requireAdminOrPlan(request, reply, ["ENTERPRISE"])) return;
     const body = (request.body as {
       topic?: string;
       title?: string;

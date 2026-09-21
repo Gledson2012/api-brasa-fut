@@ -12,6 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:enterprise": "tsx scripts/seed-enterprise.ts",
+    "migrate:prod": "tsx scripts/migrate-prod.ts",
     "sync:sofascore": "tsx scripts/sync-sofascore.ts",
     "openapi:export": "tsx scripts/export-openapi.ts",
     "test": "tsx --test tests/api.test.ts"
