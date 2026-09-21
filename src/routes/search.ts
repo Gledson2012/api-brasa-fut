@@ -5,6 +5,7 @@ import { teams, players, competitions, venues } from "../db/schema.js";
 import { ilike, or, eq } from "drizzle-orm";
 import { EspnNewsService } from "../services/espnNews.js";
 import { cache } from "../services/cache.js";
+import { unaccentIlike } from "../utils/search.js";
 
 export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -40,8 +41,8 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(teams)
           .where(
             or(
-              ilike(teams.name, `%${cleanQ}%`),
-              ilike(teams.shortName, `%${cleanQ}%`),
+              unaccentIlike(teams.name, cleanQ),
+              unaccentIlike(teams.shortName, cleanQ),
               eq(teams.acronym, cleanQ.toUpperCase())
             )
           )
@@ -61,9 +62,9 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(players)
           .where(
             or(
-              ilike(players.knownName, `%${cleanQ}%`),
-              ilike(players.firstName, `%${cleanQ}%`),
-              ilike(players.lastName, `%${cleanQ}%`)
+              unaccentIlike(players.knownName, cleanQ),
+              unaccentIlike(players.firstName, cleanQ),
+              unaccentIlike(players.lastName, cleanQ)
             )
           )
           .limit(limit);
@@ -81,7 +82,7 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(competitions)
           .where(
             or(
-              ilike(competitions.name, `%${cleanQ}%`),
+              unaccentIlike(competitions.name, cleanQ),
               ilike(competitions.code, `%${cleanQ}%`)
             )
           )

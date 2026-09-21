@@ -4,6 +4,8 @@ import { db } from "../db/index.js";
 import { transfers, teams, players } from "../db/schema.js";
 import { desc, eq, or, ilike, and, sql, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { paginate } from "../utils/pagination.js";
+import { unaccentIlike } from "../utils/search.js";
 
 // Lista de transferências iniciais padrão para seed automático caso a tabela esteja zerada
 const DEFAULT_TRANSFERS_SEED = [
@@ -290,12 +292,12 @@ export const transfersRoutes: FastifyPluginAsyncZod = async (app) => {
         }
 
         if (q && q.trim().length > 0) {
-          const cleanQ = `%${q.trim()}%`;
+          const cleanQ = q.trim();
           conditions.push(
             or(
-              ilike(transfers.playerName, cleanQ),
-              ilike(transfers.fromTeamName, cleanQ),
-              ilike(transfers.toTeamName, cleanQ)
+              unaccentIlike(transfers.playerName, cleanQ),
+              unaccentIlike(transfers.fromTeamName, cleanQ),
+              unaccentIlike(transfers.toTeamName, cleanQ)
             )
           );
         }
@@ -385,10 +387,7 @@ export const transfersRoutes: FastifyPluginAsyncZod = async (app) => {
           contractUntil: r.contractUntil,
         }));
 
-        return {
-          page,
-          limit,
-          total,
+        return paginate(page, limit, total, formatted, {
           marketSummary: {
             totalTransfers: total,
             topTransfers: formatted.slice(0, 3).map((t) => ({
@@ -397,8 +396,7 @@ export const transfersRoutes: FastifyPluginAsyncZod = async (app) => {
               fee: t.feeAmount,
             })),
           },
-          data: formatted,
-        };
+        });
       });
     }
   );

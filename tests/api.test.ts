@@ -206,4 +206,86 @@ describe("BrasaFut API - Segurança e contrato", () => {
     assert.ok(res.headers["x-ratelimit-remaining"] !== undefined);
     assert.ok(res.headers["x-ratelimit-reset"]);
   });
+
+  async function testKey(t: { skip: (message?: string) => void }): Promise<string | null> {
+    if (!dbAvailable) {
+      t.skip("sem banco");
+      return null;
+    }
+    const reg = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/register",
+      payload: { userName: "List User", email: `list_${randomBytes(6).toString("hex")}@example.com`, password: "SenhaForte123!" },
+    });
+    assert.equal(reg.statusCode, 201);
+    return JSON.parse(reg.payload).key as string;
+  }
+
+  test("13. Listas retornam envelope {page,limit,total,totalPages,data} (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    for (const url of [
+      "/api/v1/matches?limit=2",
+      "/api/v1/teams?limit=2",
+      "/api/v1/players?limit=2",
+      "/api/v1/venues?limit=2",
+      "/api/v1/competitions?limit=2",
+    ]) {
+      const res = await app.inject({ method: "GET", url, headers: { "x-api-key": key } });
+      assert.equal(res.statusCode, 200, url);
+      const body = JSON.parse(res.payload);
+      assert.equal(typeof body.page, "number", url);
+      assert.equal(typeof body.limit, "number", url);
+      assert.equal(typeof body.total, "number", url);
+      assert.equal(typeof body.totalPages, "number", url);
+      assert.ok(Array.isArray(body.data), url);
+    }
+  });
+
+  test("14. Busca insensível a acentos (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/search?q=sao%20paulo&limit=5",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    const names = [...body.teams.map((x: { name: string }) => x.name)];
+    assert.ok(
+      names.some((n: string) => n.toLowerCase().includes("são paulo")),
+      `esperava São Paulo, obteve: ${names.join(", ")}`
+    );
+  });
+
+  test("15. Escalações: 404 p/ inexistente + envelope p/ existente (requer DB)", async (t) => {
+    const key = await testKey(t);
+    if (!key) return;
+    const notFound = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches/999999999/lineups",
+      headers: { "x-api-key": key },
+    });
+    assert.equal(notFound.statusCode, 404);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/matches?limit=1",
+      headers: { "x-api-key": key },
+    });
+    const first = JSON.parse(list.payload).data[0];
+    if (!first) return t.skip("sem partidas no banco");
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/matches/${first.id}/lineups`,
+      headers: { "x-api-key": key },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.matchId, first.id);
+    assert.equal(typeof body.total, "number");
+    assert.ok(Array.isArray(body.homeTeam.starters));
+    assert.ok(Array.isArray(body.awayTeam.substitutes));
+  });
 });

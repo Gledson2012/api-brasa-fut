@@ -2,8 +2,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { competitions, seasons, playerSeasonStatistics, players, teams } from "../db/schema.js";
-import { eq, and, desc, asc, ilike, sql } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, sql, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { paginate } from "../utils/pagination.js";
+import { unaccentIlike } from "../utils/search.js";
 import { AnalyticsService } from "../services/analytics.js";
 
 export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -19,50 +21,63 @@ export const competitionRoutes: FastifyPluginAsyncZod = async (app) => {
           country: z.string().optional().describe("Filtrar por país ou região (ex: Brasil, Inglaterra, Espanha, Europa)"),
           type: z.enum(["LEAGUE", "CUP", "INTERNATIONAL"]).optional().describe("Filtrar por formato (LEAGUE, CUP, INTERNATIONAL)"),
           search: z.string().optional().describe("Buscar por nome da competição"),
+          limit: z.coerce.number().min(1).max(100).default(50),
+          page: z.coerce.number().min(1).default(1),
         }),
         response: {
-          200: z.array(
-            z.object({
-              id: z.number(),
-              name: z.string(),
-              code: z.string().nullable(),
-              country: z.string().nullable(),
-              type: z.enum(["LEAGUE", "CUP", "INTERNATIONAL"]),
-              logoUrl: z.string().nullable(),
-              createdAt: z.date().nullable(),
-            })
-          ),
+          200: z.object({
+            page: z.number(),
+            limit: z.number(),
+            total: z.number(),
+            totalPages: z.number(),
+            data: z.array(
+              z.object({
+                id: z.number(),
+                name: z.string(),
+                code: z.string().nullable(),
+                country: z.string().nullable(),
+                type: z.enum(["LEAGUE", "CUP", "INTERNATIONAL"]),
+                logoUrl: z.string().nullable(),
+                createdAt: z.date().nullable(),
+              })
+            ),
+          }),
         },
       },
     },
     async (request) => {
-      const { country, type, search } = request.query;
-      const cacheKey = `competitions:list:${country || "all"}:${type || "all"}:${search || "all"}`;
+      const { country, type, search, limit, page } = request.query;
+      const offset = (page - 1) * limit;
+      const cacheKey = `competitions:list:${country || "all"}:${type || "all"}:${search || "all"}:${limit}:${page}`;
 
       return await cache.wrap(cacheKey, 120, async () => {
         const conditions = [];
         if (country) {
-          conditions.push(ilike(competitions.country, `%${country}%`));
+          conditions.push(unaccentIlike(competitions.country, country));
         }
         if (type) {
           conditions.push(eq(competitions.type, type));
         }
         if (search) {
-          conditions.push(ilike(competitions.name, `%${search}%`));
+          conditions.push(unaccentIlike(competitions.name, search));
         }
 
-        if (conditions.length > 0) {
-          return await db
-            .select()
-            .from(competitions)
-            .where(and(...conditions))
-            .orderBy(asc(competitions.name));
-        }
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+        const [totalRow] = await db
+          .select({ count: count() })
+          .from(competitions)
+          .where(whereClause);
+        const total = Number(totalRow?.count ?? 0);
 
-        return await db
+        const data = await db
           .select()
           .from(competitions)
-          .orderBy(asc(competitions.country), asc(competitions.name));
+          .where(whereClause)
+          .orderBy(asc(competitions.country), asc(competitions.name))
+          .limit(limit)
+          .offset(offset);
+
+        return paginate(page, limit, total, data);
       });
     }
   );

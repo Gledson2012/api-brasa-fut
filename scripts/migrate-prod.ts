@@ -33,6 +33,9 @@ async function main() {
 
   await client`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);`;
 
+  // Extensão para busca insensível a acentos (usada por unaccentIlike em search/teams/players)
+  await client`CREATE EXTENSION IF NOT EXISTS "unaccent";`;
+
   const passHash = hashPassword(password);
   await client`
     INSERT INTO api_keys (user_name, email, password_hash, key, plan, rate_limit_per_minute, is_active)

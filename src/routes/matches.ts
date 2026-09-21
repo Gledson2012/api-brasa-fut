@@ -8,10 +8,11 @@ import {
   seasons,
   competitions,
   matchEvents,
+  matchLineups,
   matchStatistics,
   players,
 } from "../db/schema.js";
-import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
+import { eq, and, or, inArray, sql, desc, asc, count } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
 import { requireAdminOrPlan } from "../middleware/auth.js";
 import { FCMService } from "../services/fcm.js";
@@ -22,6 +23,7 @@ import { OddsService } from "../services/odds.js";
 import { BroadcastService } from "../services/broadcast.js";
 import { CommentaryService } from "../services/commentary.js";
 import { cache } from "../services/cache.js";
+import { paginate } from "../utils/pagination.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -159,10 +161,19 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const [totalRow] = await db
+        .select({ count: count() })
+        .from(matches)
+        .where(whereClause);
+      const total = Number(totalRow?.count ?? 0);
+
+      const data = await query
         .orderBy(asc(matches.kickoffTime))
         .limit(limit)
         .offset(offset);
+
+      return paginate(page, limit, total, data);
     }
   );
 
@@ -263,6 +274,78 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return match;
+    }
+  );
+
+  // Escalações da partida (titulares, reservas e posicionamento tático)
+  app.get(
+    "/:id/lineups",
+    {
+      schema: {
+        tags: ["Partidas"],
+        summary: "Escalações da partida (titulares, reservas e formação)",
+        params: z.object({
+          id: z.coerce.number(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const [match] = await db
+        .select({ id: matches.id, homeTeamId: matches.homeTeamId, awayTeamId: matches.awayTeamId })
+        .from(matches)
+        .where(eq(matches.id, id));
+
+      if (!match) {
+        return reply.status(404).send({ error: "Partida não encontrada" });
+      }
+
+      const rows = await db
+        .select({
+          id: matchLineups.id,
+          teamId: matchLineups.teamId,
+          isStarter: matchLineups.isStarter,
+          jerseyNumber: matchLineups.jerseyNumber,
+          formationPosition: matchLineups.formationPosition,
+          player: {
+            id: players.id,
+            firstName: players.firstName,
+            lastName: players.lastName,
+            knownName: players.knownName,
+            nationality: players.nationality,
+            primaryPosition: players.primaryPosition,
+            photoUrl: players.photoUrl,
+          },
+          team: {
+            id: teams.id,
+            name: teams.name,
+            shortName: teams.shortName,
+            acronym: teams.acronym,
+            logoUrl: teams.logoUrl,
+          },
+        })
+        .from(matchLineups)
+        .innerJoin(players, eq(matchLineups.playerId, players.id))
+        .innerJoin(teams, eq(matchLineups.teamId, teams.id))
+        .where(eq(matchLineups.matchId, id))
+        .orderBy(asc(matchLineups.teamId), asc(matchLineups.jerseyNumber));
+
+      const buildSide = (teamId: number) => {
+        const side = rows.filter((r) => r.teamId === teamId);
+        return {
+          team: side[0]?.team ?? null,
+          starters: side.filter((r) => r.isStarter),
+          substitutes: side.filter((r) => !r.isStarter),
+        };
+      };
+
+      return {
+        matchId: id,
+        total: rows.length,
+        homeTeam: buildSide(match.homeTeamId),
+        awayTeam: buildSide(match.awayTeamId),
+      };
     }
   );
 

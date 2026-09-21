@@ -100,6 +100,7 @@ A API estará disponível em:
 - `GET /api/v1/matches` - Lista partidas (filtros: `date=YYYY-MM-DD`, `status`, `live=true`, `seasonId`, `round`).
 - `GET /api/v1/matches/live` - Atalho para partidas em andamento em tempo real.
 - `GET /api/v1/matches/:id` - Detalhes completos da partida.
+- `GET /api/v1/matches/:id/lineups` - Escalações (titulares, reservas e formação tática de cada lado).
 - `GET /api/v1/matches/:id/events` - Linha do tempo dos lances do jogo (gols, cartões, substituições).
 - `GET /api/v1/matches/:id/statistics` - Estatísticas avançadas (posse, finalizações, faltas, escanteios).
 - `GET /api/v1/matches/:id/h2h` - Histórico de confronto direto (Head-to-Head) entre os clubes.
@@ -130,6 +131,11 @@ A API estará disponível em:
    ```
 6. Health público (sem auth, ideal p/ Docker/K8s/Vercel): `GET /health` e `GET /api/v1/health`.
 7. Webhook de billing exige `x-webhook-secret` (comparação timing-safe) quando `BILLING_WEBHOOK_SECRET` está definido; `simulate-pix-paid` é bloqueado em produção sem `x-admin-key`.
+
+## 📦 Convenções de resposta (v1.1.0)
+
+* **Listas paginadas** retornam sempre `{ page, limit, total, totalPages, data }` (`matches`, `teams`, `players`, `venues`, `competitions`, `transfers`).
+* **Busca insensível a acentos**: `?search=sao paulo` encontra "São Paulo" (extensão `unaccent`; rode `scripts/migrate-prod.ts` em bancos existentes).
 
 ---
 

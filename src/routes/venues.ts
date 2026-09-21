@@ -2,7 +2,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { venues } from "../db/schema.js";
-import { eq, ilike, and } from "drizzle-orm";
+import { eq, ilike, and, count } from "drizzle-orm";
+import { paginate } from "../utils/pagination.js";
+import { unaccentIlike } from "../utils/search.js";
 
 export const venueRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar estádios
@@ -31,14 +33,22 @@ export const venueRoutes: FastifyPluginAsyncZod = async (app) => {
         conditions.push(eq(venues.city, city));
       }
       if (search) {
-        conditions.push(ilike(venues.name, `%${search}%`));
+        conditions.push(unaccentIlike(venues.name, search));
       }
 
       if (conditions.length > 0) {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query.limit(limit).offset(offset);
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const [totalRow] = await db
+        .select({ count: count() })
+        .from(venues)
+        .where(whereClause);
+      const total = Number(totalRow?.count ?? 0);
+
+      const data = await query.limit(limit).offset(offset);
+      return paginate(page, limit, total, data);
     }
   );
 

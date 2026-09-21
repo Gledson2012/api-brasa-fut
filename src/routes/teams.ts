@@ -2,8 +2,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { teams, teamRosters, players, venues, seasons, matches, competitions, standings } from "../db/schema.js";
-import { eq, ilike, and, or, desc, asc } from "drizzle-orm";
+import { eq, ilike, and, or, desc, asc, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { paginate } from "../utils/pagination.js";
+import { unaccentIlike } from "../utils/search.js";
 import { AnalyticsService } from "../services/analytics.js";
 
 export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -50,8 +52,8 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
       if (search) {
         conditions.push(
           or(
-            ilike(teams.name, `%${search}%`),
-            ilike(teams.shortName, `%${search}%`),
+            unaccentIlike(teams.name, search),
+            unaccentIlike(teams.shortName, search),
             eq(teams.acronym, search.toUpperCase())
           )
         );
@@ -64,7 +66,15 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query.limit(limit).offset(offset);
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const [totalRow] = await db
+        .select({ count: count() })
+        .from(teams)
+        .where(whereClause);
+      const total = Number(totalRow?.count ?? 0);
+
+      const data = await query.limit(limit).offset(offset);
+      return paginate(page, limit, total, data);
     }
   );
 

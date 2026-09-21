@@ -3,7 +3,7 @@
   "info": {
     "title": "BrasaFut API - Documentação Oficial",
     "description": "API profissional de futebol de alta performance, com suporte a campeonatos brasileiros e internacionais, dados em tempo real, estatísticas de partidas e webhooks.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "components": {
     "securitySchemes": {
@@ -794,6 +794,27 @@
             "name": "search",
             "required": false,
             "description": "Buscar por nome da competição"
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 1,
+              "type": "number",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
           }
         ],
         "responses": {
@@ -802,53 +823,78 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "number"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "code": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "country": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "LEAGUE",
-                          "CUP",
-                          "INTERNATIONAL"
-                        ]
-                      },
-                      "logoUrl": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
-                      }
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "number"
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "code",
-                      "country",
-                      "type",
-                      "logoUrl",
-                      "createdAt"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "limit": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "totalPages": {
+                      "type": "number"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "country": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "LEAGUE",
+                              "CUP",
+                              "INTERNATIONAL"
+                            ]
+                          },
+                          "logoUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "code",
+                          "country",
+                          "type",
+                          "logoUrl",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "page",
+                    "limit",
+                    "total",
+                    "totalPages",
+                    "data"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -1946,6 +1992,29 @@
     "/api/v1/matches/{id}": {
       "get": {
         "summary": "Detalhes de uma partida",
+        "tags": [
+          "Partidas"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/matches/{id}/lineups": {
+      "get": {
+        "summary": "Escalações da partida (titulares, reservas e formação)",
         "tags": [
           "Partidas"
         ],

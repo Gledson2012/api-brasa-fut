@@ -83,7 +83,7 @@ export function buildApp() {
         title: "BrasaFut API - Documentação Oficial",
         description:
           "API profissional de futebol de alta performance, com suporte a campeonatos brasileiros e internacionais, dados em tempo real, estatísticas de partidas e webhooks.",
-        version: "1.0.0",
+        version: "1.1.0",
       },
       tags: [
         { name: "Autenticação & Planos", description: "Geração de chaves, limites e planos" },
@@ -133,7 +133,7 @@ export function buildApp() {
   app.get("/health", async () => {
     return {
       status: "ok",
-      version: "1.0.0",
+      version: "1.1.0",
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     };
@@ -142,7 +142,7 @@ export function buildApp() {
   app.get("/api/v1/health", async () => {
     return {
       status: "ok",
-      version: "1.0.0",
+      version: "1.1.0",
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     };
@@ -152,7 +152,7 @@ export function buildApp() {
     return {
       name: "BrasaFut API",
       status: "online",
-      version: "1.0.0",
+      version: "1.1.0",
       documentation: "/docs",
       realtimeWebSocket: "/api/v1/live/ws",
       endpoints: {
@@ -188,6 +188,7 @@ export function buildApp() {
         competitionChampions: "/api/v1/competitions/:id/champions",
         competitionTotw: "/api/v1/competitions/:id/team-of-the-week?round=26",
         matchHeatmap: "/api/v1/matches/:id/heatmap",
+        matchLineups: "/api/v1/matches/:id/lineups",
         playerHeatmap: "/api/v1/players/:id/heatmap",
         oddsMatch: "/api/v1/odds/matches/:matchId",
         oddsValueBets: "/api/v1/odds/value-bets",

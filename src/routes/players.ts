@@ -9,8 +9,10 @@ import {
   seasons,
   competitions,
 } from "../db/schema.js";
-import { eq, ilike, and, or } from "drizzle-orm";
+import { eq, ilike, and, or, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
+import { paginate } from "../utils/pagination.js";
+import { unaccentIlike } from "../utils/search.js";
 import { FantasyService } from "../services/fantasy.js";
 import { HeatmapService } from "../services/heatmap.js";
 
@@ -43,9 +45,9 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
       if (search) {
         conditions.push(
           or(
-            ilike(players.firstName, `%${search}%`),
-            ilike(players.lastName, `%${search}%`),
-            ilike(players.knownName, `%${search}%`)
+            unaccentIlike(players.firstName, search),
+            unaccentIlike(players.lastName, search),
+            unaccentIlike(players.knownName, search)
           )
         );
       }
@@ -60,12 +62,15 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const [totalRow] = await db
+        .select({ count: count() })
+        .from(players)
+        .where(whereClause);
+      const total = Number(totalRow?.count ?? 0);
+
       const results = await query.limit(limit).offset(offset);
-      return {
-        page,
-        limit,
-        data: results,
-      };
+      return paginate(page, limit, total, results);
     }
   );
 
