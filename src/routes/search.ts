@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { teams, players, competitions, venues } from "../db/schema.js";
-import { ilike, or, eq } from "drizzle-orm";
+import { ilike, or, eq, sql } from "drizzle-orm";
 import { EspnNewsService } from "../services/espnNews.js";
 import { cache } from "../services/cache.js";
 
@@ -40,7 +40,7 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(teams)
           .where(
             or(
-              ilike(teams.name, `%${cleanQ}%`),
+              sql`(to_tsvector('portuguese', ${teams.name}) @@ plainto_tsquery('portuguese', ${cleanQ}) OR ${teams.name} ILIKE ${'%' + cleanQ + '%'})`,
               ilike(teams.shortName, `%${cleanQ}%`),
               eq(teams.acronym, cleanQ.toUpperCase())
             )
@@ -61,7 +61,7 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(players)
           .where(
             or(
-              ilike(players.knownName, `%${cleanQ}%`),
+              sql`(to_tsvector('portuguese', coalesce(${players.knownName}, '')) @@ plainto_tsquery('portuguese', ${cleanQ}) OR ${players.knownName} ILIKE ${'%' + cleanQ + '%'})`,
               ilike(players.firstName, `%${cleanQ}%`),
               ilike(players.lastName, `%${cleanQ}%`)
             )
@@ -81,7 +81,7 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(competitions)
           .where(
             or(
-              ilike(competitions.name, `%${cleanQ}%`),
+              sql`(to_tsvector('portuguese', ${competitions.name}) @@ plainto_tsquery('portuguese', ${cleanQ}) OR ${competitions.name} ILIKE ${'%' + cleanQ + '%'})`,
               ilike(competitions.code, `%${cleanQ}%`)
             )
           )

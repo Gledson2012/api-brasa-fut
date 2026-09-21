@@ -56,7 +56,7 @@ describe("API BrasaFut - Testes de Integração", () => {
 
       expect(response.body).toMatchObject({
         message: expect.any(String),
-        key: expect.stringMatching(/^bf_live_[a-f0-9]+$/),
+        key: expect.stringMatching(/^bf_free_[a-f0-9]+$/),
         userName: "Novo Dev",
         email: "novodev@example.com",
         plan: "FREE",
@@ -104,7 +104,7 @@ describe("API BrasaFut - Testes de Integração", () => {
 
       // A chave não é mais devolvida no login: apenas o prefixo identificador.
       expect(response.body).toMatchObject({
-        keyPrefix: expect.stringMatching(/^bf_live/),
+        keyPrefix: expect.stringMatching(/^bf_free/),
         user: expect.objectContaining({
           userName: "Login Test",
           email: "logintest@example.com",
@@ -131,7 +131,7 @@ describe("API BrasaFut - Testes de Integração", () => {
         .send({ login: "rotatetest@example.com", password: "testpassword123" })
         .expect(200);
 
-      expect(response.body.key).toMatch(/^bf_live_[a-f0-9]+$/);
+      expect(response.body.key).toMatch(/^bf_free_[a-f0-9]+$/);
 
       await request(app.server)
         .get("/api/v1/auth/me")
@@ -213,8 +213,14 @@ describe("API BrasaFut - Testes de Integração", () => {
         .set("x-api-key", apiKey)
         .expect(200);
 
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBeGreaterThanOrEqual(2);
+      expect(response.body).toMatchObject({
+        data: expect.any(Array),
+        page: expect.any(Number),
+        limit: expect.any(Number),
+        total: expect.any(Number),
+        hasNextPage: expect.any(Boolean),
+      });
+      expect(response.body.data.length).toBeGreaterThanOrEqual(2);
     });
 
     it("GET /api/v1/teams/:id - deve retornar detalhes do clube", async () => {
@@ -250,10 +256,10 @@ describe("API BrasaFut - Testes de Integração", () => {
 
       expect(response.body).toMatchObject({
         data: expect.any(Array),
-        pagination: expect.objectContaining({
-          page: 1,
-          limit: expect.any(Number),
-        }),
+        page: 1,
+        limit: expect.any(Number),
+        total: expect.any(Number),
+        hasNextPage: expect.any(Boolean),
       });
     });
 

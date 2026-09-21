@@ -27,6 +27,7 @@ export async function authAndRateLimitMiddleware(
   // Rotas públicas que não necessitam de API Key
   const isPublicRoute =
     url === "/" ||
+    url === "/health" ||
     url.startsWith("/docs") ||
     url.startsWith("/api/v1/auth/register") ||
     url.startsWith("/api/v1/auth/login") ||
@@ -149,7 +150,7 @@ export async function authAndRateLimitMiddleware(
   }
 
   // Anexar dados do usuário autenticado no request context
-  (request as any).apiUser = keyRecord;
+  request.apiUser = keyRecord;
 }
 
 export function requireAdminOrPlan(
@@ -163,7 +164,7 @@ export function requireAdminOrPlan(
     return true;
   }
 
-  const user = (request as any).apiUser;
+  const user = request.apiUser;
   if (!user) {
     reply.status(401).send({ error: "Não autenticado", message: "Chave de API necessária." });
     return false;
@@ -177,7 +178,7 @@ export function requireAdminOrPlan(
     return true;
   }
 
-  if (!allowedPlans.includes(user.plan)) {
+  if (!(allowedPlans as string[]).includes(user.plan)) {
     reply.status(403).send({
       error: "Acesso Negado",
       message: `Esta operação requer privilégios administrativos ou plano ${allowedPlans.join(" ou ")}.`,

@@ -214,7 +214,7 @@ export const billingRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const { paymentId } = request.params;
-      const user = (request as any).apiUser as { id: number } | undefined;
+      const user = request.apiUser;
 
       const [payment] = await db
         .select()

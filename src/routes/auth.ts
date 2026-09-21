@@ -13,6 +13,7 @@ import {
   invalidateCachedKey,
   requireAdminOrPlan,
 } from "../middleware/auth.js";
+import { auditLog } from "../services/auditLog.js";
 
 const userResponseSchema = z.object({
   id: z.number(),
@@ -79,7 +80,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         tags: ["Autenticação & Planos"],
         summary: "Registrar desenvolvedor e gerar chave de API (API Key)",
         description:
-          "Gera uma chave 'bf_live_...' para consumir a API. A chave é exibida apenas nesta resposta: guardamos somente o hash dela. Aceita senha para possibilitar login e rotação posteriores.",
+          "Gera uma chave 'bf_free_...' para consumir a API. A chave é exibida apenas nesta resposta: guardamos somente o hash dela. Aceita senha para possibilitar login e rotação posteriores.",
         body: z.object({
           userName: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
           email: z.string().email("E-mail inválido"),
@@ -297,6 +298,15 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       // em memória, a chave antiga expira no TTL de 60s por instância.
       await invalidateCachedKey(user.keyHash);
 
+      auditLog({
+        action: "key.rotate",
+        userId: user.id,
+        userEmail: user.email,
+        userPlan: user.plan,
+        ip: request.ip,
+        requestId: request.id as string,
+      });
+
       return reply.send({
         message:
           "Chave rotacionada com sucesso! A chave anterior foi invalidada. Guarde a nova chave agora: ela não será exibida novamente.",
@@ -417,7 +427,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
       if (!user) {
         return reply.status(401).send({ error: "Não autenticado" });
       }

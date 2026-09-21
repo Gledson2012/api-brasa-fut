@@ -6,6 +6,7 @@ import { eq, asc, and, inArray } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { SimulationService } from "../services/simulation.js";
 import { SupercomputerService } from "../services/supercomputer.js";
+import { requireAdminOrPlan } from "../middleware/auth.js";
 
 const LIVE_STATUSES = [
   "FIRST_HALF",
@@ -30,8 +31,9 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
         }),
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { seasonId } = request.query;
+      reply.header("Cache-Control", "public, max-age=15, stale-while-revalidate=30");
 
       return await cache.wrap(`standings:live:season:${seasonId}`, 15, async () => {
         // 1. Obter tabela base oficial
@@ -211,8 +213,9 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
         }),
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { seasonId } = request.query;
+      reply.header("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
 
       return await cache.wrap(`standings:season:${seasonId}`, 30, async () => {
         const table = await db
@@ -272,7 +275,8 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
         }),
       },
     },
-    async (request) => {
+    async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
       const { seasonId, predictions } = request.body;
       return await SimulationService.simulateStandings(seasonId, predictions);
     }
@@ -292,8 +296,9 @@ export const standingsRoutes: FastifyPluginAsyncZod = async (app) => {
         }),
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { seasonId } = request.query;
+      reply.header("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
 
       return await cache.wrap(`standings:supercomputer:${seasonId}`, 300, async () => {
         let rows = await db

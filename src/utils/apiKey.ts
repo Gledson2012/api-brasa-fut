@@ -9,9 +9,9 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  */
 
 const PREFIX_BY_PLAN = {
-  FREE: "bf_live",
-  PRO: "bf_live",
-  ENTERPRISE: "bf_live_enterprise",
+  FREE: "bf_free",
+  PRO: "bf_pro",
+  ENTERPRISE: "bf_ent",
 } as const;
 
 export type ApiPlan = keyof typeof PREFIX_BY_PLAN;

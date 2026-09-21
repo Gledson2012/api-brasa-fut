@@ -17,4 +17,18 @@ async function start() {
   }
 }
 
+async function shutdown(signal: string) {
+  app.log.info({ signal }, "Shutting down gracefully...");
+  try {
+    await app.close();
+    process.exit(0);
+  } catch (err) {
+    app.log.error(err, "Error during shutdown");
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 start();

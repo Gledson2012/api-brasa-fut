@@ -9,7 +9,7 @@ import {
   seasons,
   competitions,
 } from "../db/schema.js";
-import { eq, ilike, and, or } from "drizzle-orm";
+import { eq, ilike, and, or, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { FantasyService } from "../services/fantasy.js";
 import { HeatmapService } from "../services/heatmap.js";
@@ -61,14 +61,20 @@ export const playerRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
+      // COUNT query
+      let countQuery = db.select({ total: count() }).from(players);
+      if (conditions.length > 0) {
+        countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
+      }
+      const [{ total }] = await countQuery;
+
       const results = await query.limit(limit).offset(offset);
+
       return {
         page,
         limit,
-        pagination: {
-          page,
-          limit,
-        },
+        total,
+        hasNextPage: offset + results.length < total,
         data: results,
       };
     }

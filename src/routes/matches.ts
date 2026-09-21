@@ -14,6 +14,7 @@ import {
 import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
 import { realtimeBroker } from "../services/pubsub.js";
 import { requireAdminOrPlan } from "../middleware/auth.js";
+import { auditLog } from "../services/auditLog.js";
 import { FCMService } from "../services/fcm.js";
 import { AnalyticsService } from "../services/analytics.js";
 import { FantasyService } from "../services/fantasy.js";
@@ -719,6 +720,18 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
         data: event,
       });
 
+      auditLog({
+        action: "match.event.create",
+        userId: request.apiUser?.id,
+        userEmail: request.apiUser?.email,
+        userPlan: request.apiUser?.plan,
+        resourceType: "match",
+        resourceId: id,
+        ip: request.ip,
+        requestId: request.id as string,
+        metadata: { eventType: body.type, minute: body.minute },
+      });
+
       return reply.status(201).send(event);
     }
   );
@@ -775,6 +788,18 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
         matchId: id,
         timestamp: new Date().toISOString(),
         data: updated,
+      });
+
+      auditLog({
+        action: "match.score.update",
+        userId: request.apiUser?.id,
+        userEmail: request.apiUser?.email,
+        userPlan: request.apiUser?.plan,
+        resourceType: "match",
+        resourceId: id,
+        ip: request.ip,
+        requestId: request.id as string,
+        metadata: { changes: body },
       });
 
       return updated;

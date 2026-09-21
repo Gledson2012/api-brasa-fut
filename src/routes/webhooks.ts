@@ -5,6 +5,7 @@ import { webhooks, webhookDeliveries } from "../db/schema.js";
 import { eq, and, desc } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { WebhookDispatcher } from "../services/webhookDispatcher.js";
+import { auditLog } from "../services/auditLog.js";
 
 export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar webhooks do desenvolvedor autenticado
@@ -17,7 +18,7 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
       if (!user) {
         return reply.status(401).send({ error: "Não autenticado" });
       }
@@ -46,7 +47,7 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
       if (!user) {
         return reply.status(401).send({ error: "Não autenticado" });
       }
@@ -66,6 +67,18 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
           isActive: true,
         })
         .returning();
+
+      auditLog({
+        action: "webhook.create",
+        userId: user.id,
+        userEmail: user.email,
+        userPlan: user.plan,
+        resourceType: "webhook",
+        resourceId: newWebhook.id,
+        ip: request.ip,
+        requestId: request.id as string,
+        metadata: { url, events },
+      });
 
       return reply.status(201).send({
         message: "Webhook cadastrado com sucesso!",
@@ -89,7 +102,8 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
+      if (!user) return reply.status(401).send({ error: "Não autenticado" });
       const { id } = request.params;
 
       const [deleted] = await db
@@ -100,6 +114,17 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!deleted) {
         return reply.status(404).send({ error: "Webhook não encontrado" });
       }
+
+      auditLog({
+        action: "webhook.delete",
+        userId: user.id,
+        userEmail: user.email,
+        userPlan: user.plan,
+        resourceType: "webhook",
+        resourceId: id,
+        ip: request.ip,
+        requestId: request.id as string,
+      });
 
       return { message: "Webhook removido com sucesso" };
     }
@@ -118,7 +143,8 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
+      if (!user) return reply.status(401).send({ error: "Não autenticado" });
       const { id } = request.params;
 
       // Garantir que o webhook pertence ao usuário autenticado
@@ -155,7 +181,8 @@ export const webhookRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const user = (request as any).apiUser;
+      const user = request.apiUser;
+      if (!user) return reply.status(401).send({ error: "Não autenticado" });
       const { id } = request.params;
 
       const [hook] = await db

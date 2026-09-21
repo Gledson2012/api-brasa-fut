@@ -1,5 +1,6 @@
 import fastify from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import fastifyWebsocket from "@fastify/websocket";
@@ -10,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import * as dotenv from "dotenv";
+import { randomUUID } from "node:crypto";
 
 import { competitionRoutes } from "./routes/competitions.js";
 import { teamRoutes } from "./routes/teams.js";
@@ -41,6 +43,7 @@ import { highlightsRoutes } from "./routes/highlights.js";
 import { rankingRoutes } from "./routes/rankings.js";
 import { broadcastRoutes } from "./routes/broadcasts.js";
 import { authAndRateLimitMiddleware } from "./middleware/auth.js";
+import { setAuditLogger } from "./services/auditLog.js";
 
 dotenv.config();
 
@@ -51,6 +54,25 @@ export function buildApp() {
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  setAuditLogger(app.log);
+
+  // X-API-Version on every response
+  app.addHook("onSend", async (_req, reply) => {
+    reply.header("X-API-Version", "1.0.0");
+  });
+
+  // Security headers
+  app.register(helmet, {
+    contentSecurityPolicy: false, // disabled — API-only, no HTML served
+  });
+
+  // X-Request-ID on every response
+  app.addHook("onRequest", async (request, reply) => {
+    const id = (request.headers["x-request-id"] as string | undefined) ?? randomUUID();
+    request.id = id;
+    reply.header("x-request-id", id);
+  });
 
   // CORS — restrinja com CORS_ORIGINS="https://app.exemplo.com,https://outro.com"
   const corsOrigins = (process.env.CORS_ORIGINS || "*")
@@ -141,6 +163,17 @@ export function buildApp() {
   app.get("/openapi.json", { schema: { hide: true } }, async () =>
     app.swagger()
   );
+
+  // Health check — DB reachability probe for load balancers / Kubernetes
+  app.get("/health", { schema: { hide: true } }, async (_req, reply) => {
+    try {
+      const { db } = await import("./db/index.js");
+      await db.execute("select 1" as any);
+      return reply.send({ status: "ok", db: "up", ts: new Date().toISOString() });
+    } catch {
+      return reply.status(503).send({ status: "degraded", db: "down", ts: new Date().toISOString() });
+    }
+  });
 
   // Rota raiz e status
   app.get("/", async () => {

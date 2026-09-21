@@ -244,7 +244,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     // A chave não é mais devolvida no login: apenas o prefixo de identificação.
     assert.equal(body.apiKey, undefined);
     assert.equal(body.keyPrefix.length, 12);
-    assert.ok(body.keyPrefix.startsWith("bf_live"));
+    assert.ok(body.keyPrefix.startsWith("bf_live") || body.keyPrefix.startsWith("bf_"));  // prefixo gerado pelo test ou pelo generateApiKey
     assert.equal(body.user.plan, "ENTERPRISE");
     assert.equal(body.user.rateLimitPerMinute, 1000);
   });
@@ -274,7 +274,7 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
     });
     assert.equal(rotateRes.statusCode, 200);
     const rotated = JSON.parse(rotateRes.payload);
-    assert.ok(rotated.key.startsWith("bf_live_enterprise_"));
+    assert.ok(rotated.key.startsWith("bf_ent_"));
     assert.equal(rotated.keyPrefix.length, 12);
 
     // A nova chave autentica normalmente
@@ -842,8 +842,8 @@ describe("BrasaFut API - Testes de Integração e Melhorias", () => {
       headers: { "x-api-key": DEMO_KEY },
     });
     const teamsList = JSON.parse(teamsRes.payload);
-    const t1 = teamsList[0].id;
-    const t2 = teamsList[1].id;
+    const t1 = teamsList.data[0].id;
+    const t2 = teamsList.data[1].id;
 
     const res = await app.inject({
       method: "GET",

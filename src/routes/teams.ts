@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { teams, teamRosters, players, venues, seasons, matches, competitions, standings } from "../db/schema.js";
-import { eq, ilike, and, or, desc, asc } from "drizzle-orm";
+import { eq, ilike, and, or, desc, asc, count } from "drizzle-orm";
 import { cache } from "../services/cache.js";
 import { AnalyticsService } from "../services/analytics.js";
 import { TacticsService } from "../services/tactics.js";
@@ -66,7 +66,21 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query.limit(limit).offset(offset);
+      let countQuery = db.select({ total: count() }).from(teams).leftJoin(venues, eq(teams.venueId, venues.id));
+      if (conditions.length > 0) {
+        countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
+      }
+      const [{ total }] = await countQuery;
+
+      const results = await query.limit(limit).offset(offset);
+
+      return {
+        page,
+        limit,
+        total,
+        hasNextPage: offset + results.length < total,
+        data: results,
+      };
     }
   );
 
