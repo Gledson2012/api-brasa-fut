@@ -184,61 +184,63 @@ export const matchRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async () => {
-      const homeTeam = db
-        .select({
-          id: teams.id,
-          name: teams.name,
-          shortName: teams.shortName,
-          acronym: teams.acronym,
-          logoUrl: teams.logoUrl,
-        })
-        .from(teams)
-        .as("home_team");
+      return await cache.wrap("matches:live", 10, async () => {
+        const homeTeam = db
+          .select({
+            id: teams.id,
+            name: teams.name,
+            shortName: teams.shortName,
+            acronym: teams.acronym,
+            logoUrl: teams.logoUrl,
+          })
+          .from(teams)
+          .as("home_team");
 
-      const awayTeam = db
-        .select({
-          id: teams.id,
-          name: teams.name,
-          shortName: teams.shortName,
-          acronym: teams.acronym,
-          logoUrl: teams.logoUrl,
-        })
-        .from(teams)
-        .as("away_team");
+        const awayTeam = db
+          .select({
+            id: teams.id,
+            name: teams.name,
+            shortName: teams.shortName,
+            acronym: teams.acronym,
+            logoUrl: teams.logoUrl,
+          })
+          .from(teams)
+          .as("away_team");
 
-      return await db
-        .select({
-          id: matches.id,
-          round: matches.round,
-          kickoffTime: matches.kickoffTime,
-          status: matches.status,
-          homeScore: matches.homeScore,
-          awayScore: matches.awayScore,
-          homeTeam: {
-            id: homeTeam.id,
-            name: homeTeam.name,
-            shortName: homeTeam.shortName,
-            acronym: homeTeam.acronym,
-            logoUrl: homeTeam.logoUrl,
-          },
-          awayTeam: {
-            id: awayTeam.id,
-            name: awayTeam.name,
-            shortName: awayTeam.shortName,
-            acronym: awayTeam.acronym,
-            logoUrl: awayTeam.logoUrl,
-          },
-          venue: {
-            id: venues.id,
-            name: venues.name,
-            city: venues.city,
-          },
-        })
-        .from(matches)
-        .innerJoin(homeTeam, eq(matches.homeTeamId, homeTeam.id))
-        .innerJoin(awayTeam, eq(matches.awayTeamId, awayTeam.id))
-        .leftJoin(venues, eq(matches.venueId, venues.id))
-        .where(inArray(matches.status, [...LIVE_STATUSES]));
+        return await db
+          .select({
+            id: matches.id,
+            round: matches.round,
+            kickoffTime: matches.kickoffTime,
+            status: matches.status,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+            homeTeam: {
+              id: homeTeam.id,
+              name: homeTeam.name,
+              shortName: homeTeam.shortName,
+              acronym: homeTeam.acronym,
+              logoUrl: homeTeam.logoUrl,
+            },
+            awayTeam: {
+              id: awayTeam.id,
+              name: awayTeam.name,
+              shortName: awayTeam.shortName,
+              acronym: awayTeam.acronym,
+              logoUrl: awayTeam.logoUrl,
+            },
+            venue: {
+              id: venues.id,
+              name: venues.name,
+              city: venues.city,
+            },
+          })
+          .from(matches)
+          .innerJoin(homeTeam, eq(matches.homeTeamId, homeTeam.id))
+          .innerJoin(awayTeam, eq(matches.awayTeamId, awayTeam.id))
+          .leftJoin(venues, eq(matches.venueId, venues.id))
+          .where(inArray(matches.status, [...LIVE_STATUSES]));
+      });
     }
   );
 

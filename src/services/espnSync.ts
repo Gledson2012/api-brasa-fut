@@ -1,6 +1,7 @@
 import { db } from "../db/index.js";
-import { competitions, matches, seasons, teams, venues, players, teamRosters } from "../db/schema.js";
+import { competitions, matches, seasons, teams, venues, players, teamRosters, matchEvents, matchStatistics } from "../db/schema.js";
 import { eq, and, or, ilike, gte, lte } from "drizzle-orm";
+import { realtimeBroker } from "./pubsub.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -325,7 +326,14 @@ export class EspnSyncService {
           )
           .limit(1);
 
+        let matchId: number;
         if (existing) {
+          matchId = existing.id;
+          const scoreOrStatusChanged =
+            existing.homeScore !== homeScore ||
+            existing.awayScore !== awayScore ||
+            existing.status !== status;
+
           await db
             .update(matches)
             .set({
@@ -338,19 +346,51 @@ export class EspnSyncService {
               updatedAt: new Date(),
             })
             .where(eq(matches.id, existing.id));
+
+          if (scoreOrStatusChanged) {
+            realtimeBroker.emit("live_update", {
+              type: "SCORE_UPDATE",
+              matchId,
+              timestamp: new Date().toISOString(),
+              data: {
+                matchId,
+                status,
+                homeScore,
+                awayScore,
+                displayClock: ev.status?.displayClock,
+                homeTeam: homeComp.team?.displayName,
+                awayTeam: awayComp.team?.displayName,
+              },
+            });
+          }
         } else {
-          await db.insert(matches).values({
-            seasonId,
-            venueId,
-            homeTeamId,
-            awayTeamId,
-            round: roundName,
-            kickoffTime: kickoff,
-            status,
-            homeScore,
-            awayScore,
-          });
+          const [inserted] = await db
+            .insert(matches)
+            .values({
+              seasonId,
+              venueId,
+              homeTeamId,
+              awayTeamId,
+              round: roundName,
+              kickoffTime: kickoff,
+              status,
+              homeScore,
+              awayScore,
+            })
+            .returning();
+          matchId = inserted.id;
         }
+
+        // Sincronizar eventos detalhados (gols, cartões) e estatísticas da partida
+        await this.syncMatchEventsAndStatistics(
+          matchId,
+          homeTeamId,
+          awayTeamId,
+          homeComp,
+          awayComp,
+          competitionItem.details,
+          config.country
+        );
 
         syncedCount++;
       } catch (err: any) {
@@ -362,19 +402,253 @@ export class EspnSyncService {
   }
 
   /**
-   * Sincroniza todas as ligas reais configuradas
+   * Sincroniza todas as ligas reais configuradas com concorrência paralela em lotes (batching)
    */
   public static async syncAll(date?: string): Promise<{ success: boolean; matchesSynced: number }> {
     let total = 0;
-    for (const conf of ESPN_TOURNAMENTS) {
-      try {
-        const count = await this.syncLeague(conf, date);
-        total += count;
-      } catch (err: any) {
-        console.warn(`[EspnSync] Falha ao sincronizar ${conf.name}:`, err.message);
+    const BATCH_SIZE = 6;
+    for (let i = 0; i < ESPN_TOURNAMENTS.length; i += BATCH_SIZE) {
+      const batch = ESPN_TOURNAMENTS.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((conf) => this.syncLeague(conf, date))
+      );
+      for (const res of results) {
+        if (res.status === "fulfilled") {
+          total += res.value;
+        }
       }
     }
     return { success: true, matchesSynced: total };
+  }
+
+  /**
+   * Sincroniza estatísticas e eventos (gols e cartões) de uma partida
+   */
+  private static async syncMatchEventsAndStatistics(
+    matchId: number,
+    homeTeamId: number,
+    awayTeamId: number,
+    homeComp: any,
+    awayComp: any,
+    details: any[] | undefined,
+    country: string
+  ): Promise<void> {
+    // 1. Sincronizar Estatísticas de ambas as equipes
+    await this.syncTeamStats(matchId, homeTeamId, homeComp?.statistics);
+    await this.syncTeamStats(matchId, awayTeamId, awayComp?.statistics);
+
+    // 2. Sincronizar Eventos (Gols, Cartões)
+    if (details && Array.isArray(details) && details.length > 0) {
+      for (const item of details) {
+        try {
+          const textType = (item.type?.text || "").toLowerCase();
+          const isGoal = textType.includes("goal");
+          const isYellow = textType.includes("yellow");
+          const isRed = textType.includes("red");
+
+          if (!isGoal && !isYellow && !isRed) continue;
+
+          let eventType: "GOAL" | "OWN_GOAL" | "PENALTY_SCORED" | "YELLOW_CARD" | "RED_CARD";
+          if (isGoal) {
+            if (item.ownGoal) eventType = "OWN_GOAL";
+            else if (item.penaltyKick) eventType = "PENALTY_SCORED";
+            else eventType = "GOAL";
+          } else if (isYellow) {
+            eventType = "YELLOW_CARD";
+          } else {
+            eventType = "RED_CARD";
+          }
+
+          // Identificar time correspondente
+          const eventEspnTeamId = item.team?.id ? String(item.team.id) : null;
+          let eventTeamId = homeTeamId;
+          if (eventEspnTeamId && awayComp?.team?.id && String(awayComp.team.id) === eventEspnTeamId) {
+            eventTeamId = awayTeamId;
+          }
+
+          // Identificar atleta envolvido
+          const athlete = item.athletesInvolved?.[0];
+          let playerId: number | null = null;
+          if (athlete) {
+            playerId = await this.findOrCreatePlayerFromAthlete(athlete, country);
+          }
+
+          if (!playerId) continue;
+
+          // Parse de tempo (ex: "45'+7'" ou "60'")
+          const clockStr = item.clock?.displayValue || "";
+          let minute = 0;
+          let extraMinute = 0;
+          const matchClock = clockStr.match(/(\d+)(?:'\s*\+\s*(\d+))?/);
+          if (matchClock) {
+            minute = parseInt(matchClock[1], 10);
+            if (matchClock[2]) extraMinute = parseInt(matchClock[2], 10);
+          } else if (item.clock?.value) {
+            minute = Math.min(130, Math.floor(item.clock.value / 60));
+          }
+
+          // Idempotência para não duplicar eventos já registrados
+          const [existingEvent] = await db
+            .select()
+            .from(matchEvents)
+            .where(
+              and(
+                eq(matchEvents.matchId, matchId),
+                eq(matchEvents.playerId, playerId),
+                eq(matchEvents.minute, minute),
+                eq(matchEvents.type, eventType)
+              )
+            )
+            .limit(1);
+
+          if (!existingEvent) {
+            await db.insert(matchEvents).values({
+              matchId,
+              teamId: eventTeamId,
+              playerId,
+              type: eventType,
+              minute: Math.min(130, minute),
+              extraMinute: Math.min(30, extraMinute),
+              description: item.type?.text || null,
+            });
+
+            // Disparar notificação em tempo real via WebSocket
+            realtimeBroker.emit("live_update", {
+              type: "MATCH_EVENT",
+              matchId,
+              timestamp: new Date().toISOString(),
+              data: {
+                matchId,
+                eventType,
+                minute,
+                playerName: athlete?.displayName,
+                teamId: eventTeamId,
+              },
+            });
+          }
+        } catch {
+          // ignora se algum evento individual falhar
+        }
+      }
+    }
+  }
+
+  /**
+   * Sincroniza estatísticas consolidadas de um time na partida
+   */
+  private static async syncTeamStats(matchId: number, teamId: number, statistics: any[] | undefined) {
+    if (!statistics || !Array.isArray(statistics) || statistics.length === 0) return;
+
+    let possessionPct: number | null = null;
+    let shotsTotal = 0;
+    let shotsOnTarget = 0;
+    let corners = 0;
+    let fouls = 0;
+    let yellowCards = 0;
+    let redCards = 0;
+    let saves = 0;
+
+    for (const stat of statistics) {
+      const val = parseFloat(stat.displayValue || "0") || 0;
+      switch (stat.name) {
+        case "possessionPct":
+          possessionPct = Math.round(val);
+          break;
+        case "totalShots":
+          shotsTotal = Math.round(val);
+          break;
+        case "shotsOnTarget":
+          shotsOnTarget = Math.round(val);
+          break;
+        case "wonCorners":
+          corners = Math.round(val);
+          break;
+        case "foulsCommitted":
+          fouls = Math.round(val);
+          break;
+        case "yellowCards":
+          yellowCards = Math.round(val);
+          break;
+        case "redCards":
+          redCards = Math.round(val);
+          break;
+        case "saves":
+          saves = Math.round(val);
+          break;
+      }
+    }
+
+    const [existing] = await db
+      .select()
+      .from(matchStatistics)
+      .where(and(eq(matchStatistics.matchId, matchId), eq(matchStatistics.teamId, teamId)))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(matchStatistics)
+        .set({
+          possessionPct: possessionPct ?? existing.possessionPct,
+          shotsTotal,
+          shotsOnTarget,
+          corners,
+          fouls,
+          yellowCards,
+          redCards,
+          saves,
+          updatedAt: new Date(),
+        })
+        .where(eq(matchStatistics.id, existing.id));
+    } else {
+      await db.insert(matchStatistics).values({
+        matchId,
+        teamId,
+        possessionPct,
+        shotsTotal,
+        shotsOnTarget,
+        corners,
+        fouls,
+        yellowCards,
+        redCards,
+        saves,
+      });
+    }
+  }
+
+  /**
+   * Localiza ou cria atleta para vinculação com eventos da partida
+   */
+  private static async findOrCreatePlayerFromAthlete(athlete: any, country: string): Promise<number> {
+    const knownName = athlete.displayName || `${athlete.firstName || ""} ${athlete.lastName || ""}`.trim() || "Jogador";
+    const firstName = athlete.firstName || knownName.split(" ")[0] || "Jogador";
+    const lastName = athlete.lastName || knownName.split(" ").slice(1).join(" ") || firstName;
+    const nationality = athlete.citizenship || country || "Brasil";
+
+    const [existing] = await db
+      .select()
+      .from(players)
+      .where(
+        or(
+          ilike(players.knownName, knownName),
+          and(ilike(players.firstName, firstName), ilike(players.lastName, lastName))
+        )
+      )
+      .limit(1);
+
+    if (existing) return existing.id;
+
+    const [inserted] = await db
+      .insert(players)
+      .values({
+        firstName,
+        lastName,
+        knownName,
+        nationality,
+        primaryPosition: "FORWARD",
+      })
+      .returning();
+
+    return inserted.id;
   }
 
   /**
@@ -526,7 +800,51 @@ export class EspnSyncService {
 
     return synced;
   }
+
+  /**
+   * Descobre dinamicamente o ID da ESPN para qualquer clube do mundo
+   */
+  public static findEspnTeamId(team: {
+    id: number;
+    name: string;
+    shortName?: string | null;
+    country?: string | null;
+    logoUrl?: string | null;
+  }): { espnId: string; league: string } | null {
+    const cleanName = (team.shortName || team.name).toLowerCase();
+
+    // 1. Mapa direto de clubes conhecidos
+    const mappedKey = Object.keys(ESPN_TEAM_MAP).find((key) => cleanName.includes(key));
+    if (mappedKey) return ESPN_TEAM_MAP[mappedKey];
+
+    // 2. Extração do ID a partir da URL do logo da ESPN
+    if (team.logoUrl) {
+      const match = team.logoUrl.match(/\/soccer\/500\/(\d+)\.png/);
+      if (match) {
+        const country = team.country || "";
+        const league = COUNTRY_LEAGUE_MAP[country] || "bra.1";
+        return { espnId: match[1], league };
+      }
+    }
+
+    return null;
+  }
 }
+
+export const COUNTRY_LEAGUE_MAP: Record<string, string> = {
+  Brasil: "bra.1",
+  Inglaterra: "eng.1",
+  Espanha: "esp.1",
+  Itália: "ita.1",
+  Alemanha: "ger.1",
+  França: "fra.1",
+  Portugal: "por.1",
+  Holanda: "ned.1",
+  "Arábia Saudita": "ksa.1",
+  Japão: "jpn.1",
+  "Estados Unidos": "usa.1",
+  Argentina: "arg.1",
+};
 
 export const ESPN_TEAM_MAP: Record<string, { espnId: string; league: string }> = {
   corinthians: { espnId: "874", league: "bra.1" },

@@ -325,10 +325,8 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
       if (roster.length < 10 || sync) {
         const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1);
         if (team) {
-          const cleanName = (team.shortName || team.name).toLowerCase();
-          const mappedKey = Object.keys(ESPN_TEAM_MAP).find((key) => cleanName.includes(key));
-          if (mappedKey) {
-            const mapped = ESPN_TEAM_MAP[mappedKey];
+          const mapped = EspnSyncService.findEspnTeamId(team);
+          if (mapped) {
             await EspnSyncService.syncTeamRoster(id, mapped.espnId, mapped.league, seasonId || 1);
             roster = await db
               .select({
