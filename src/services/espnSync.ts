@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { competitions, matches, seasons, teams, venues } from "../db/schema.js";
+import { competitions, matches, seasons, teams, venues, players, teamRosters } from "../db/schema.js";
 import { eq, and, or, ilike, gte, lte } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -376,4 +376,179 @@ export class EspnSyncService {
     }
     return { success: true, matchesSynced: total };
   }
+
+  /**
+   * Sincroniza o elenco oficial de um clube da ESPN para o banco de dados
+   */
+  public static async syncTeamRoster(
+    teamId: number,
+    espnTeamId: string,
+    leagueSlug = "bra.1",
+    seasonId = 1
+  ): Promise<number> {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueSlug}/teams/${espnTeamId}/roster`;
+    let data: any = null;
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (res.ok) {
+        data = await res.json();
+      }
+    } catch {
+      try {
+        const { stdout } = await execFileAsync("curl", ["-s", "--compressed", "-m", "10", url]);
+        data = JSON.parse(stdout);
+      } catch (err: any) {
+        console.warn(`[EspnSync] Falha ao buscar elenco de ${espnTeamId}:`, err.message);
+      }
+    }
+
+    if (!data?.athletes || !Array.isArray(data.athletes)) {
+      return 0;
+    }
+
+    let synced = 0;
+    for (const athlete of data.athletes) {
+      try {
+        const knownName = athlete.displayName || `${athlete.firstName || ""} ${athlete.lastName || ""}`.trim() || "Jogador";
+        const firstName = athlete.firstName || knownName.split(" ")[0] || "Jogador";
+        const lastName = athlete.lastName || knownName.split(" ").slice(1).join(" ") || firstName;
+        const nationality = athlete.citizenship || "Brasil";
+        const birthDate = athlete.dateOfBirth ? athlete.dateOfBirth.split("T")[0] : null;
+
+        const posDisplay = athlete.position?.displayName || "";
+        let position: "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD" = "FORWARD";
+        if (posDisplay.includes("Goal")) position = "GOALKEEPER";
+        else if (posDisplay.includes("Def")) position = "DEFENDER";
+        else if (posDisplay.includes("Mid")) position = "MIDFIELDER";
+
+        const jerseyNumber = athlete.jersey ? parseInt(athlete.jersey, 10) : null;
+        const photoUrl = athlete.headshot?.href || null;
+
+        // Converter peso (lbs para kg) se disponível
+        let weightKg: number | null = null;
+        if (athlete.displayWeight) {
+          const match = athlete.displayWeight.match(/(\d+)/);
+          if (match) weightKg = Math.round(parseInt(match[1], 10) * 0.453592);
+        }
+
+        // Converter altura (pés/polegadas para cm) se disponível
+        let heightCm: number | null = null;
+        if (athlete.displayHeight) {
+          const match = athlete.displayHeight.match(/(\d+)'\s*(\d+)/);
+          if (match) {
+            const feet = parseInt(match[1], 10);
+            const inches = parseInt(match[2], 10);
+            heightCm = Math.round((feet * 12 + inches) * 2.54);
+          }
+        }
+
+        // Buscar ou criar jogador por nome exato para evitar colisões (ex: Hugo x Hugo Souza)
+        const [existingPlayer] = await db
+          .select()
+          .from(players)
+          .where(
+            or(
+              ilike(players.knownName, knownName),
+              and(ilike(players.firstName, firstName), ilike(players.lastName, lastName))
+            )
+          )
+          .limit(1);
+
+        let playerId: number;
+        if (existingPlayer) {
+          playerId = existingPlayer.id;
+          await db
+            .update(players)
+            .set({
+              photoUrl: photoUrl || existingPlayer.photoUrl,
+              birthDate: birthDate || existingPlayer.birthDate,
+              heightCm: heightCm || existingPlayer.heightCm,
+              weightKg: weightKg || existingPlayer.weightKg,
+              primaryPosition: position,
+              nationality,
+              updatedAt: new Date(),
+            })
+            .where(eq(players.id, playerId));
+        } else {
+          const [inserted] = await db
+            .insert(players)
+            .values({
+              firstName,
+              lastName,
+              knownName,
+              birthDate,
+              nationality,
+              primaryPosition: position,
+              heightCm,
+              weightKg,
+              photoUrl,
+            })
+            .returning();
+          playerId = inserted.id;
+        }
+
+        // Vincular ao elenco (team_rosters)
+        const [existingRoster] = await db
+          .select()
+          .from(teamRosters)
+          .where(
+            and(
+              eq(teamRosters.teamId, teamId),
+              eq(teamRosters.playerId, playerId),
+              eq(teamRosters.seasonId, seasonId)
+            )
+          )
+          .limit(1);
+
+        if (existingRoster) {
+          await db
+            .update(teamRosters)
+            .set({
+              jerseyNumber: jerseyNumber ?? existingRoster.jerseyNumber,
+              position,
+            })
+            .where(eq(teamRosters.id, existingRoster.id));
+        } else {
+          await db.insert(teamRosters).values({
+            teamId,
+            playerId,
+            seasonId,
+            jerseyNumber,
+            position,
+          });
+        }
+
+        synced++;
+      } catch (err: any) {
+        console.warn(`[EspnSync] Erro ao sincronizar jogador ${athlete?.displayName}:`, err.message);
+      }
+    }
+
+    return synced;
+  }
 }
+
+export const ESPN_TEAM_MAP: Record<string, { espnId: string; league: string }> = {
+  corinthians: { espnId: "874", league: "bra.1" },
+  palmeiras: { espnId: "2029", league: "bra.1" },
+  flamengo: { espnId: "819", league: "bra.1" },
+  "sao paulo": { espnId: "2026", league: "bra.1" },
+  "são paulo": { espnId: "2026", league: "bra.1" },
+  santos: { espnId: "2674", league: "bra.1" },
+  fluminense: { espnId: "3445", league: "bra.1" },
+  botafogo: { espnId: "6086", league: "bra.1" },
+  vasco: { espnId: "3454", league: "bra.1" },
+  gremio: { espnId: "6273", league: "bra.1" },
+  grêmio: { espnId: "6273", league: "bra.1" },
+  internacional: { espnId: "1936", league: "bra.1" },
+  cruzeiro: { espnId: "2022", league: "bra.1" },
+  "atletico-mg": { espnId: "7632", league: "bra.1" },
+  "atlético-mg": { espnId: "7632", league: "bra.1" },
+  bahia: { espnId: "9967", league: "bra.1" },
+  "athletico-pr": { espnId: "3458", league: "bra.1" },
+  fortaleza: { espnId: "7633", league: "bra.1" },
+  vitoria: { espnId: "3457", league: "bra.1" },
+  vitória: { espnId: "3457", league: "bra.1" },
+  "red bull bragantino": { espnId: "6079", league: "bra.1" },
+  bragantino: { espnId: "6079", league: "bra.1" },
+};

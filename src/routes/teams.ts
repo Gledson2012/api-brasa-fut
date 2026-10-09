@@ -7,6 +7,7 @@ import { cache } from "../services/cache.js";
 import { AnalyticsService } from "../services/analytics.js";
 import { TacticsService } from "../services/tactics.js";
 import { KitsService } from "../services/kits.js";
+import { EspnSyncService, ESPN_TEAM_MAP } from "../services/espnSync.js";
 
 export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
   // Listar times com filtros
@@ -284,19 +285,20 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         }),
         querystring: z.object({
           seasonId: z.coerce.number().optional(),
+          sync: z.coerce.boolean().optional(),
         }),
       },
     },
     async (request) => {
       const { id } = request.params;
-      const { seasonId } = request.query;
+      const { seasonId, sync } = request.query;
 
       let whereClause = eq(teamRosters.teamId, id);
       if (seasonId) {
         whereClause = and(whereClause, eq(teamRosters.seasonId, seasonId))!;
       }
 
-      const roster = await db
+      let roster = await db
         .select({
           rosterId: teamRosters.id,
           jerseyNumber: teamRosters.jerseyNumber,
@@ -318,6 +320,41 @@ export const teamRoutes: FastifyPluginAsyncZod = async (app) => {
         .from(teamRosters)
         .innerJoin(players, eq(teamRosters.playerId, players.id))
         .where(whereClause);
+
+      // Sincronização automática com dados oficiais da ESPN se o elenco for muito pequeno ou sync=true
+      if (roster.length < 10 || sync) {
+        const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1);
+        if (team) {
+          const cleanName = (team.shortName || team.name).toLowerCase();
+          const mappedKey = Object.keys(ESPN_TEAM_MAP).find((key) => cleanName.includes(key));
+          if (mappedKey) {
+            const mapped = ESPN_TEAM_MAP[mappedKey];
+            await EspnSyncService.syncTeamRoster(id, mapped.espnId, mapped.league, seasonId || 1);
+            roster = await db
+              .select({
+                rosterId: teamRosters.id,
+                jerseyNumber: teamRosters.jerseyNumber,
+                position: teamRosters.position,
+                seasonId: teamRosters.seasonId,
+                player: {
+                  id: players.id,
+                  firstName: players.firstName,
+                  lastName: players.lastName,
+                  knownName: players.knownName,
+                  birthDate: players.birthDate,
+                  nationality: players.nationality,
+                  primaryPosition: players.primaryPosition,
+                  heightCm: players.heightCm,
+                  weightKg: players.weightKg,
+                  photoUrl: players.photoUrl,
+                },
+              })
+              .from(teamRosters)
+              .innerJoin(players, eq(teamRosters.playerId, players.id))
+              .where(whereClause);
+          }
+        }
+      }
 
       return roster;
     }
