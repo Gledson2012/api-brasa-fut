@@ -98,8 +98,8 @@ export const ESPN_TOURNAMENTS: EspnTournamentConfig[] = [
 export class EspnSyncService {
   private static async fetchScoreboard(league: string, date?: string): Promise<any | null> {
     const url = date
-      ? `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${date.replace(/-/g, "")}&lang=pt&region=br`
-      : `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?lang=pt&region=br`;
+      ? `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${date.replace(/-/g, "")}`
+      : `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard`;
 
     try {
       const response = await fetch(url, {
@@ -220,13 +220,26 @@ export class EspnSyncService {
     return inserted.id;
   }
 
-  private static mapStatus(statusType: any): "SCHEDULED" | "FIRST_HALF" | "HALF_TIME" | "SECOND_HALF" | "EXTRA_TIME" | "PENALTIES" | "FINISHED" | "POSTPONED" | "CANCELLED" {
+  private static mapStatus(statusObj: any): "SCHEDULED" | "FIRST_HALF" | "HALF_TIME" | "SECOND_HALF" | "EXTRA_TIME" | "PENALTIES" | "FINISHED" | "POSTPONED" | "CANCELLED" {
+    const statusType = statusObj?.type || statusObj;
     if (statusType?.completed) return "FINISHED";
     const state = statusType?.state;
     if (state === "in") {
+      const typeName = statusType?.name || "";
       const desc = (statusType?.description || "").toLowerCase();
-      if (desc.includes("intervalo") || desc.includes("half") || desc.includes("ht")) return "HALF_TIME";
-      if (desc.includes("1") || desc.includes("primeiro")) return "FIRST_HALF";
+      
+      if (typeName === "STATUS_HALFTIME" || desc === "halftime" || desc === "intervalo" || desc === "ht") {
+        return "HALF_TIME";
+      }
+      if (typeName.includes("SHOOTOUT") || typeName.includes("PENALTIES")) {
+        return "PENALTIES";
+      }
+      if (typeName.includes("EXTRA") || desc.includes("extra") || desc.includes("prorroga")) {
+        return "EXTRA_TIME";
+      }
+      if (typeName === "STATUS_FIRST_HALF" || desc.includes("first") || desc.includes("1st") || desc.includes("primeiro") || statusObj?.period === 1) {
+        return "FIRST_HALF";
+      }
       return "SECOND_HALF";
     }
     if (statusType?.name?.includes("POSTPONED")) return "POSTPONED";
@@ -289,7 +302,7 @@ export class EspnSyncService {
         const venueId = await this.findOrCreateVenue(ev.venue?.displayName, config.country);
 
         const kickoff = new Date(ev.date);
-        const status = this.mapStatus(ev.status?.type);
+        const status = this.mapStatus(ev.status);
         const homeScore = parseInt(homeComp.score, 10) || 0;
         const awayScore = parseInt(awayComp.score, 10) || 0;
         const roundName = competitionItem.round ? `Rodada ${competitionItem.round}` : "Fase Oficial";
