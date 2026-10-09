@@ -19,13 +19,14 @@
     "db:studio": "drizzle-kit studio",
     "db:init-cloud": "tsx src/db/init-cloud.ts",
     "sync:sofascore": "tsx scripts/sync-sofascore.ts",
+    "sync:espn": "tsx scripts/sync-espn.ts",
     "openapi:export": "tsx scripts/export-openapi.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run tests/integration",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
+    "lint": "eslint src --no-error-on-unmatched-pattern",
+    "lint:fix": "eslint src --no-error-on-unmatched-pattern --fix",
     "prepare": "husky install"
   },
   "keywords": [

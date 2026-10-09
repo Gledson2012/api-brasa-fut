@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { SofascoreSyncService } from "../services/sofascoreSync.js";
+import { EspnSyncService } from "../services/espnSync.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { requireAdminOrPlan } from "../middleware/auth.js";
@@ -40,7 +41,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Sincronização"],
-        summary: "Sincronizar partidas e tabela em tempo real via Sofascore (cache 60s)",
+        summary: "Sincronizar partidas e tabela em tempo real via Sofascore (com fallback ESPN)",
       },
     },
     async (request, reply) => {
@@ -53,7 +54,46 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
         liveOnly: liveOnly === "true",
         leagues: leagues ? leagues.split(",") : undefined,
       });
+
+      if (!result.matchesSynced || result.matchesSynced === 0) {
+        const espnResult = await EspnSyncService.syncAll();
+        return {
+          ...result,
+          espnFallback: true,
+          matchesSynced: espnResult.matchesSynced,
+          message: `${result.message} (Dados reais complementados via ESPN Oficial)`,
+        };
+      }
       return result;
+    }
+  );
+
+  app.get(
+    "/espn",
+    {
+      schema: {
+        tags: ["Sincronização"],
+        summary: "Sincronizar partidas 100% REAIS via ESPN Oficial",
+      },
+    },
+    async (request) => {
+      const { date } = (request.query || {}) as { date?: string };
+      return await EspnSyncService.syncAll(date);
+    }
+  );
+
+  app.post(
+    "/espn",
+    {
+      schema: {
+        tags: ["Sincronização"],
+        summary: "Forçar sincronização de partidas reais via ESPN (Admin)",
+      },
+    },
+    async (request, reply) => {
+      if (!requireAdminOrPlan(request, reply, ["ENTERPRISE", "PRO"])) return;
+      const { date } = (request.query || {}) as { date?: string };
+      return await EspnSyncService.syncAll(date);
     }
   );
 

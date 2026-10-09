@@ -22,21 +22,30 @@ import { randomBytes } from "node:crypto";
 export async function seed(closeClient: boolean = true) {
   console.log("🌱 Iniciando o seed de dados da BrasaFut API...");
 
-  // Limpar tabelas existentes (ordem reversa de dependências)
-  await db.delete(payments);
-  await db.delete(apiKeys);
-  await db.delete(playerSeasonStatistics);
-  await db.delete(matchStatistics);
-  await db.delete(matchEvents);
-  await db.delete(matchLineups);
-  await db.delete(standings);
-  await db.delete(matches);
-  await db.delete(teamRosters);
-  await db.delete(players);
-  await db.delete(seasons);
-  await db.delete(competitions);
-  await db.delete(teams);
-  await db.delete(venues);
+  // Limpar tabelas existentes e resetar sequências de ID para 1
+  await client.unsafe(`
+    TRUNCATE TABLE
+      webhook_deliveries,
+      webhooks,
+      team_absences,
+      transfers,
+      referees,
+      payments,
+      api_keys,
+      player_season_statistics,
+      match_statistics,
+      match_events,
+      match_lineups,
+      standings,
+      matches,
+      team_rosters,
+      players,
+      seasons,
+      competitions,
+      teams,
+      venues
+    RESTART IDENTITY CASCADE;
+  `);
 
   console.log("🏟️ Inserindo estádios...");
   const insertedVenues = await db
@@ -207,9 +216,54 @@ export async function seed(closeClient: boolean = true) {
     }))
   );
 
-  console.log("🌐 Sincronizando partidas e classificações 100% REAIS com Sofascore Oficial...");
+  console.log("📊 Inserindo estatísticas individuais dos atletas...");
+  const statsData = [
+    { player: "Pedro", team: "Flamengo", appearances: 15, matchesStarted: 15, minutesPlayed: 1250, goals: 12, assists: 3, rating: "7.6", shotsTotal: 45, shotsOnTarget: 25, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Estêvão", team: "Palmeiras", appearances: 16, matchesStarted: 15, minutesPlayed: 1300, goals: 10, assists: 6, rating: "7.8", shotsTotal: 38, shotsOnTarget: 20, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Yuri Alberto", team: "Corinthians", appearances: 17, matchesStarted: 16, minutesPlayed: 1400, goals: 9, assists: 2, rating: "7.2", shotsTotal: 40, shotsOnTarget: 18, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Hulk", team: "Atlético-MG", appearances: 14, matchesStarted: 14, minutesPlayed: 1200, goals: 8, assists: 5, rating: "7.5", shotsTotal: 35, shotsOnTarget: 17, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Calleri", team: "São Paulo", appearances: 15, matchesStarted: 14, minutesPlayed: 1180, goals: 7, assists: 2, rating: "7.1", shotsTotal: 30, shotsOnTarget: 15, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Memphis Depay", team: "Corinthians", appearances: 10, matchesStarted: 8, minutesPlayed: 750, goals: 6, assists: 4, rating: "7.4", shotsTotal: 28, shotsOnTarget: 14, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Raphael Veiga", team: "Palmeiras", appearances: 16, matchesStarted: 16, minutesPlayed: 1350, goals: 6, assists: 7, rating: "7.5", shotsTotal: 32, shotsOnTarget: 14, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Arrascaeta", team: "Flamengo", appearances: 14, matchesStarted: 13, minutesPlayed: 1100, goals: 5, assists: 8, rating: "7.7", shotsTotal: 25, shotsOnTarget: 12, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Rodrigo Garro", team: "Corinthians", appearances: 17, matchesStarted: 17, minutesPlayed: 1450, goals: 4, assists: 9, rating: "7.6", shotsTotal: 26, shotsOnTarget: 11, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Gustavo Scarpa", team: "Atlético-MG", appearances: 16, matchesStarted: 15, minutesPlayed: 1280, goals: 4, assists: 6, rating: "7.3", shotsTotal: 22, shotsOnTarget: 9, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Lucas Moura", team: "São Paulo", appearances: 15, matchesStarted: 14, minutesPlayed: 1220, goals: 5, assists: 4, rating: "7.4", shotsTotal: 27, shotsOnTarget: 12, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Gerson", team: "Flamengo", appearances: 16, matchesStarted: 16, minutesPlayed: 1380, goals: 3, assists: 5, rating: "7.4", shotsTotal: 18, shotsOnTarget: 8, cleanSheets: 0, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Gustavo Gómez", team: "Palmeiras", appearances: 16, matchesStarted: 16, minutesPlayed: 1440, goals: 2, assists: 1, rating: "7.2", shotsTotal: 12, shotsOnTarget: 5, cleanSheets: 8, saves: 0, goalsConceded: 0, penaltySaves: 0 },
+    { player: "Rossi", team: "Flamengo", appearances: 16, matchesStarted: 16, minutesPlayed: 1440, goals: 0, assists: 0, rating: "7.3", shotsTotal: 0, shotsOnTarget: 0, cleanSheets: 9, saves: 42, goalsConceded: 11, penaltySaves: 1 },
+    { player: "Weverton", team: "Palmeiras", appearances: 16, matchesStarted: 16, minutesPlayed: 1440, goals: 0, assists: 0, rating: "7.2", shotsTotal: 0, shotsOnTarget: 0, cleanSheets: 8, saves: 48, goalsConceded: 13, penaltySaves: 2 },
+    { player: "Hugo Souza", team: "Corinthians", appearances: 17, matchesStarted: 17, minutesPlayed: 1530, goals: 0, assists: 0, rating: "7.4", shotsTotal: 0, shotsOnTarget: 0, cleanSheets: 6, saves: 65, goalsConceded: 19, penaltySaves: 3 },
+    { player: "Rafael", team: "São Paulo", appearances: 16, matchesStarted: 16, minutesPlayed: 1440, goals: 0, assists: 0, rating: "7.1", shotsTotal: 0, shotsOnTarget: 0, cleanSheets: 7, saves: 50, goalsConceded: 15, penaltySaves: 1 },
+  ];
+
+  await db.insert(playerSeasonStatistics).values(
+    statsData.map((s) => ({
+      playerId: playerMap.get(s.player)!,
+      teamId: teamMap.get(s.team)!,
+      seasonId: season2026.id,
+      appearances: s.appearances,
+      matchesStarted: s.matchesStarted,
+      minutesPlayed: s.minutesPlayed,
+      goals: s.goals,
+      assists: s.assists,
+      rating: s.rating,
+      shotsTotal: s.shotsTotal,
+      shotsOnTarget: s.shotsOnTarget,
+      cleanSheets: s.cleanSheets,
+      saves: s.saves,
+      goalsConceded: s.goalsConceded,
+      penaltySaves: s.penaltySaves,
+    }))
+  );
+
+  console.log("🌐 Sincronizando partidas e classificações com provedores oficiais...");
   const { SofascoreSyncService } = await import("../services/sofascoreSync.js");
   await SofascoreSyncService.sync(true);
+
+  console.log("⚽ Sincronizando partidas reais multi-liga com ESPN Oficial...");
+  const { EspnSyncService } = await import("../services/espnSync.js");
+  await EspnSyncService.syncAll();
 
   console.log("🔑 Criando a conta administrativa inicial...");
 

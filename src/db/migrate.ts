@@ -102,6 +102,16 @@ async function tableExists(tableName: string): Promise<boolean> {
   return Boolean(row?.present);
 }
 
+async function columnExists(tableName: string, columnName: string): Promise<boolean> {
+  const [row] = await client`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = ${tableName} AND column_name = ${columnName}
+    ) AS present;
+  `;
+  return Boolean(row?.present);
+}
+
 async function ensureMigrationsTable(): Promise<void> {
   await client.unsafe(`CREATE SCHEMA IF NOT EXISTS "${MIGRATIONS_SCHEMA}"`);
   await client.unsafe(`
@@ -196,6 +206,25 @@ export async function runMigrations(): Promise<MigrationResult> {
       );
     } else {
       result = "up-to-date";
+    }
+
+    const keyHashExists = await columnExists("api_keys", "key_hash");
+    const keyColumnExists = await columnExists("api_keys", "key");
+
+    if (keyHashExists && !keyColumnExists) {
+      for (const entry of journal.entries.slice(1)) {
+        const [applied] = await client`
+          SELECT 1 FROM "drizzle"."__drizzle_migrations"
+          WHERE created_at = ${entry.when} LIMIT 1;
+        `;
+        if (!applied) {
+          const entrySql = readMigrationSql(entry.tag);
+          await stampMigration(entrySql, entry.when);
+          console.log(
+            `✅ Migration '${entry.tag}' registrada como aplicada (schema já atualizado).`
+          );
+        }
+      }
     }
   }
 
